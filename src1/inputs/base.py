@@ -34,18 +34,14 @@ FLAGS = tf.app.flags.FLAGS # load FLAGS.word_dim
 PAD_WORD = "<pad>"
 
 # nltk.tokenize.regexp.WordPunctTokenizer
-# regexp = re.compile(r'\w+|[^\w\s]+')
-pattern = r'\w+|[^\w\s]+' 
+pattern = r'\d+|\w+|[^\w\s]+'
 regexp = re.compile(pattern)
 
 def wordpunct_tokenizer(line):
-  line = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", line)
+  line = re.sub(r"[^A-Za-z0-9]", " ", line)
   line = re.sub(r"\s{2,}", " ", line)
-  return regexp.findall(line)
 
-def split_by_punct(segment):
-  """Splits str segment by punctuation, filters our empties and spaces."""
-  return [s for s in re.split(r'\W+', segment) if s and not s.isspace()]
+  return regexp.findall(line)
 
 def write_vocab(vocab):
   '''collect words in sentence'''

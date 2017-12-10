@@ -31,7 +31,7 @@ def _load_raw_data_from_dir(dir, neg_or_pos):
     with open(filename) as f:
       lines = f.readlines()
       assert len(lines) == 1
-      tokens = base.split_by_punct(lines[0].lower())
+      tokens = base.wordpunct_tokenizer(lines[0].lower())
 
       example = Raw_Example(label, tokens)
       data.append(example)
@@ -72,12 +72,8 @@ def build_imdb_vocab():
       vocab_freqs.items(), key=lambda item: item[1], reverse=True)
 
   # Limit vocab size
-  # ordered_vocab_freqs = ordered_vocab_freqs[:MAX_VOCAB_SIZE]
+  ordered_vocab_freqs = ordered_vocab_freqs[:MAX_VOCAB_SIZE]
 
   vocab = [token for token, _ in ordered_vocab_freqs]
   
   return vocab
-
-if __name__ == '__main__':
-
-  load_imdb_data("data/aclImdb/train")

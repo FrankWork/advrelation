@@ -8,10 +8,9 @@ pattern = r'\w+|[^\w\s]+' # nltk.tokenize.regexp.WordPunctTokenizer
 regexp = re.compile(pattern)
 
 def wordpunct_tokenizer(line):
-  line = re.sub(r"[^A-Za-z0-9(),!?\'\`\"]", " ", line)
+  line = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", line)
   line = re.sub(r"\s{2,}", " ", line)
-  # line = re.sub(r'\d+', '0', line)
-  # line = re.sub(r'\d', '0', line)
+
   return regexp.findall(line)
 
 
