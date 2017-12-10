@@ -33,47 +33,26 @@ FLAGS = tf.app.flags.FLAGS # load FLAGS.word_dim
 
 PAD_WORD = "<pad>"
 
-def clean_str(string):
-    """
-    String cleaning.
-    From: https://github.com/yoonkim/CNN_sentence/blob/master/process_data.py
-    >>> clean_str("I'll clean this (string)")
-    "i 'll clean this ( string )"
-    """
-    string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
-    string = re.sub(r"\'s", " \'s", string)
-    string = re.sub(r"\'ve", " \'ve", string)
-    string = re.sub(r"n\'t", " n\'t", string)
-    string = re.sub(r"\'re", " \'re", string)
-    string = re.sub(r"\'d", " \'d", string)
-    string = re.sub(r"\'ll", " \'ll", string)
-    string = re.sub(r",", " , ", string)
-    string = re.sub(r"!", " ! ", string)
-    string = re.sub(r"\(", " ( ", string)
-    string = re.sub(r"\)", " ) ", string)
-    string = re.sub(r"\?", " ? ", string)
-    string = re.sub(r"\s{2,}", " ", string)
+# nltk.tokenize.regexp.WordPunctTokenizer
+# regexp = re.compile(r'\w+|[^\w\s]+')
+pattern = r'\w+|[^\w\s]+' 
+regexp = re.compile(pattern)
 
-    string = re.sub(r"#", "", string)
-    return string.strip().lower()
+def wordpunct_tokenizer(line):
+  line = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", line)
+  line = re.sub(r"\s{2,}", " ", line)
+  return regexp.findall(line)
 
-def split_by_punct(line):
-  """Splits str line by punctuation, filters our empties and spaces."""
-  return [s for s in re.split(r'\W+', line) if s and not s.isspace()]
+def split_by_punct(segment):
+  """Splits str segment by punctuation, filters our empties and spaces."""
+  return [s for s in re.split(r'\W+', segment) if s and not s.isspace()]
 
-
-def maybe_build_vocab(raw_train_data, raw_test_data):
+def write_vocab(vocab):
   '''collect words in sentence'''
-  if not os.path.exists(FLAGS.vocab_file):
-    vocab = set()
-    for example in raw_train_data + raw_test_data:
-      for w in example.sentence:
-          vocab.add(w)
-
-    with open(FLAGS.vocab_file, 'w') as f:
-      for w in sorted(list(vocab)):
-        f.write('%s\n' % w)
-      f.write('%s\n' % PAD_WORD)
+  with open(FLAGS.vocab_file, 'w') as f:
+    for w in sorted(list(vocab)):
+      f.write('%s\n' % w)
+    f.write('%s\n' % PAD_WORD)
 
 def _load_vocab(vocab_file):
   # load vocab from file
@@ -145,7 +124,6 @@ def map_words_to_id(raw_data, word2id):
     pad_n = FLAGS.max_len - len(raw_example.sentence)
     raw_example.sentence.extend(pad_n*[pad_id])
 
-
 def maybe_write_tfrecord(raw_data, filename):
   '''if the destination file is not exist on disk, convert the raw_data to 
   tf.trian.SequenceExample and write to file.
@@ -159,7 +137,6 @@ def maybe_write_tfrecord(raw_data, filename):
       example = build_sequence_example(raw_example)
       writer.write(example.SerializeToString())
     writer.close()
-
 
 def read_tfrecord_to_batch(filename, epoch, batch_size, pad_value, shuffle=True):
   '''read TFRecord file to get batch tensors for tensorflow models
@@ -191,7 +168,6 @@ def read_tfrecord_to_batch(filename, epoch, batch_size, pad_value, shuffle=True)
     iterator = dataset.make_one_shot_iterator()
     batch = iterator.get_next()
     return batch
-
 
 def inputs():
   raw_train_data = load_raw_data(FLAGS.train_file)
@@ -233,5 +209,4 @@ def inputs():
 
   return train_data, test_data, word_embed
 
-if __name__ == '__main__':
-  print(clean_str("''and i've done it!"))
+

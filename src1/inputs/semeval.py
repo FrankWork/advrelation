@@ -5,9 +5,9 @@ from collections import namedtuple
 
 flags = tf.app.flags
 
-flags.DEFINE_string("train_file", "data/train.txt", 
+flags.DEFINE_string("train_file", "data/train.cln", 
                              "original training file")
-flags.DEFINE_string("test_file", "data/test.txt", 
+flags.DEFINE_string("test_file", "data/test.cln", 
                              "original test file")
 
 flags.DEFINE_string("train_record", "data/train.tfrecord", 
@@ -25,9 +25,6 @@ Raw_Example = namedtuple('Raw_Example', 'label entity1 entity2 sentence')
 PositionPair = namedtuple('PosPair', 'first last')
 
 
-# NOTE: after the sentence is cleaned, the position of the entity pair is also
-#        changed, but here the position is remained same. Because changing the 
-#        position is not imporving the performance.
 def load_raw_data(filename):
   '''load raw data from text file, 
 
@@ -36,9 +33,7 @@ def load_raw_data(filename):
   data = []
   with open(filename) as f:
     for line in f:
-      clr_line = clean_str(line)
-      words = clr_line.split(' ')
-      # words = line.strip().split(' ')
+      words = line.strip().split(' ')
       
       sent = words[5:]
 
@@ -51,7 +46,18 @@ def load_raw_data(filename):
       data.append(example)
   return data
 
+def build_semeval_vocab(raw_data, raw_test_data):
+  '''collect words in sentence'''
+  if not os.path.exists(FLAGS.vocab_file):
+    vocab = set()
+    for example in raw_train_data + raw_test_data:
+      for w in example.sentence:
+          vocab.add(w)
 
+    with open(FLAGS.vocab_file, 'w') as f:
+      for w in sorted(list(vocab)):
+        f.write('%s\n' % w)
+      f.write('%s\n' % PAD_WORD)
 
 def _lexical_feature(raw_example):
   def _entity_context(e_idx, sent):

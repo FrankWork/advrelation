@@ -35,8 +35,8 @@ flags.DEFINE_boolean('build_data', False, 'set True to generate data')
 FLAGS = tf.app.flags.FLAGS
 
 def build_data():
-  imdb_train, imdb_test = imdb.load_imdb_raw_data()
-  base.maybe_build_vocab(imdb_train, imdb_test)
+  imdb_vocab = imdb.build_imdb_vocab()
+  base.write_vocab(imdb_vocab)
 
 def trace_runtime(sess, m_train):
   '''
