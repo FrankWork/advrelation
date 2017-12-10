@@ -3,7 +3,9 @@ import time
 import sys
 import tensorflow as tf
 import numpy as np
-from reader import base as base_reader
+
+from inputs import base
+from inputs import imdb
 from models import cnn_model
 
 # tf.set_random_seed(0)
@@ -11,42 +13,6 @@ from models import cnn_model
 
 flags = tf.app.flags
 
-flags.DEFINE_string("train_file", "data/train.txt", 
-                             "original training file")
-flags.DEFINE_string("test_file", "data/test.txt", 
-                             "original test file")
-
-flags.DEFINE_string("vocab_file", "data/vocab.txt", 
-                              "vocab of train and test data")
-
-flags.DEFINE_string("google_embed300_file", 
-                             "data/embed300.google.npy", 
-                             "google news word embeddding")
-flags.DEFINE_string("google_words_file", 
-                             "data/google_words.lst", 
-                             "google words list")
-flags.DEFINE_string("trimmed_embed300_file", 
-                             "data/embed300.trim.npy", 
-                             "trimmed google embedding")
-
-flags.DEFINE_string("senna_embed50_file", 
-                             "data/embed50.senna.npy", 
-                             "senna words embeddding")
-flags.DEFINE_string("senna_words_file", 
-                             "data/senna_words.lst", 
-                             "senna words list")
-flags.DEFINE_string("trimmed_embed50_file", 
-                             "data/embed50.trim.npy", 
-                             "trimmed senna embedding")
-
-flags.DEFINE_string("train_record", "data/train.tfrecord", 
-                             "training file of TFRecord format")
-flags.DEFINE_string("test_record", "data/test.tfrecord", 
-                             "Test file of TFRecord format")
-
-
-flags.DEFINE_string("relations_file", "data/relations_new.txt", "relations file")
-flags.DEFINE_string("results_file", "data/results.txt", "predicted results file")
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
 
 flags.DEFINE_integer("max_len", 96, "max length of sentences")
@@ -64,8 +30,13 @@ flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
 
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('trace', False, 'set True to test')
+flags.DEFINE_boolean('build_data', False, 'set True to generate data')
 
 FLAGS = tf.app.flags.FLAGS
+
+def build_data():
+  imdb_train, imdb_test = imdb.load_imdb_raw_data()
+  base.maybe_build_vocab(imdb_train, imdb_test)
 
 def trace_runtime(sess, m_train):
   '''
@@ -87,7 +58,6 @@ def trace_runtime(sess, m_train):
   trace = timeline.Timeline(step_stats=run_metadata.step_stats)
   trace_file.write(trace.generate_chrome_trace_format())
   trace_file.close()
-
 
 def train(sess, m_train, m_valid):
   n = 1
@@ -135,6 +105,10 @@ def test(sess, m_valid):
 
 
 def main(_):
+  if FLAGS.build_data:
+    build_data()
+    exit()
+
   with tf.Graph().as_default():
     train_data, test_data, word_embed = base_reader.inputs()
     
