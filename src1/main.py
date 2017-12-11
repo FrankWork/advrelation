@@ -4,8 +4,9 @@ import sys
 import tensorflow as tf
 import numpy as np
 
-from inputs import base
+from inputs import util
 from inputs import imdb
+from inputs import semeval
 from models import cnn_model
 
 # tf.set_random_seed(0)
@@ -15,7 +16,6 @@ flags = tf.app.flags
 
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
 
-flags.DEFINE_integer("max_len", 96, "max length of sentences")
 flags.DEFINE_integer("num_relations", 19, "number of relations")
 flags.DEFINE_integer("word_dim", 50, "word embedding size")
 flags.DEFINE_integer("num_epochs", 200, "number of epochs")
@@ -31,12 +31,35 @@ flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('trace', False, 'set True to test')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
+flags.DEFINE_boolean('trim_embed', False, 'set True to trim pretrained embedding')
 
 FLAGS = tf.app.flags.FLAGS
 
 def build_data():
-  imdb_vocab = imdb.build_imdb_vocab()
-  base.write_vocab(imdb_vocab)
+  '''load raw data, build vocab, build TFRecord data, trim embeddings
+  '''
+  print('load raw data')
+  imdb_train, imdb_test       = imdb.load_raw_data()
+  semeval_train, semeval_test = semeval.load_raw_data()
+
+  print('build vocab')
+  imdb_vocab   = imdb.build_vocab(imdb_train + imdb_test)
+  emeval_vocab = semeval.build_vocab(semeval_train + semeval_test)
+  vocab = imdb_vocab.union(emeval_vocab)
+  util.write_vocab(vocab)
+  del imdb_vocab
+  del emeval_vocab
+  del vocab
+
+  vocab2id = util.load_vocab2id()
+  print('convert semeval data to TFRecord')
+  semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
+  print('convert imdb data to TFRecord')
+  imdb.write_as_tfrecord(imdb_train, imdb_test, vocab2id)
+
+def trim_embed():
+  print('trimming pretrained embeddings')
+  util.trim_embeddings()
 
 def trace_runtime(sess, m_train):
   '''
@@ -101,18 +124,23 @@ def test(sess, m_valid):
   accuracy, predictions = sess.run(fetches)
   print('accuracy: %.4f' % accuracy)
   
-  base_reader.write_results(predictions, FLAGS.relations_file, FLAGS.results_file)
-
+  semeval.write_results(predictions, FLAGS.relations_file, FLAGS.results_file)
 
 def main(_):
   if FLAGS.build_data:
     build_data()
     exit()
+  elif FLAGS.trim_embed:
+    trim_embed()
+    exit()
 
   with tf.Graph().as_default():
-    train_data, test_data, word_embed = base_reader.inputs()
-    
-    
+    word_embed = util.load_embedding()
+    semeval_train, semeval_test = semeval.read_tfrecord(
+                                                FLAGS.num_epochs, 
+                                                FLAGS.batch_size)
+    imdb_train = imdb.read_tfrecord(FLAGS.num_epochs, FLAGS.batch_size)
+
     m_train, m_valid = cnn_model.build_train_valid_model(word_embed, 
                                                       train_data, test_data)
     
@@ -137,8 +165,5 @@ def main(_):
       else:
         train(sess, m_train, m_valid)
 
-      
-  
-          
 if __name__ == '__main__':
   tf.app.run()

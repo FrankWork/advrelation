@@ -3,20 +3,28 @@ import tensorflow as tf
 from collections import defaultdict
 from collections import namedtuple
 
+from inputs import util
+
 flags = tf.app.flags
 
-flags.DEFINE_string("train_file", "data/train.cln", 
+flags.DEFINE_string("semeval_train_file", "data/SemEval/train.cln", 
                              "original training file")
-flags.DEFINE_string("test_file", "data/test.cln", 
+flags.DEFINE_string("semeval_test_file", "data/SemEval/test.cln", 
                              "original test file")
 
-flags.DEFINE_string("train_record", "data/train.tfrecord", 
+flags.DEFINE_string("semeval_train_record", 
+                              "data/generated/train.semeval.tfrecord", 
                              "training file of TFRecord format")
-flags.DEFINE_string("test_record", "data/test.tfrecord", 
+flags.DEFINE_string("semeval_test_record", 
+                             "data/generated/test.semeval.tfrecord", 
                              "Test file of TFRecord format")
 
-flags.DEFINE_string("relations_file", "data/relations_new.txt", "relations file")
-flags.DEFINE_string("results_file", "data/results.txt", "predicted results file")
+flags.DEFINE_string("relations_file", "data/SemEval/relations.txt", 
+                             "relations file, map relation id to its text")
+flags.DEFINE_string("results_file", "data/generated/results.txt", 
+                             "predicted results file")
+
+flags.DEFINE_integer("semeval_max_len", 98, "max length of sentences")
 
 FLAGS = flags.FLAGS
 
@@ -25,7 +33,7 @@ Raw_Example = namedtuple('Raw_Example', 'label entity1 entity2 sentence')
 PositionPair = namedtuple('PosPair', 'first last')
 
 
-def load_raw_data(filename):
+def _load_raw_data(filename):
   '''load raw data from text file, 
 
   return: a list of Raw_Example
@@ -46,18 +54,19 @@ def load_raw_data(filename):
       data.append(example)
   return data
 
-def build_semeval_vocab(raw_data, raw_test_data):
-  '''collect words in sentence'''
-  if not os.path.exists(FLAGS.vocab_file):
-    vocab = set()
-    for example in raw_train_data + raw_test_data:
-      for w in example.sentence:
-          vocab.add(w)
+def load_raw_data():
+  train_data = _load_raw_data(FLAGS.semeval_train_file)
+  test_data = _load_raw_data(FLAGS.semeval_test_file)
+  return train_data, test_data
 
-    with open(FLAGS.vocab_file, 'w') as f:
-      for w in sorted(list(vocab)):
-        f.write('%s\n' % w)
-      f.write('%s\n' % PAD_WORD)
+def build_vocab(raw_data):
+  '''collect words in sentence'''
+  vocab = set()
+  for example in raw_data:
+    for w in example.sentence:
+        vocab.add(w)
+
+  return vocab
 
 def _lexical_feature(raw_example):
   def _entity_context(e_idx, sent):
@@ -79,11 +88,11 @@ def _lexical_feature(raw_example):
     return context
 
     
-  e1_idx = raw_example.entity1.first
-  e2_idx = raw_example.entity2.first
+  e1_idx = raw_example['entity1'].first
+  e2_idx = raw_example['entity2'].first
 
-  context1 = _entity_context(e1_idx, raw_example.sentence)
-  context2 = _entity_context(e2_idx, raw_example.sentence)
+  context1 = _entity_context(e1_idx, raw_example['sentence'])
+  context2 = _entity_context(e2_idx, raw_example['sentence'])
 
   # ignore WordNet hypernyms in paper
   lexical = context1 + context2
@@ -102,25 +111,25 @@ def _position_feature(raw_example):
     
     return 122
 
-  e1_idx = raw_example.entity1.first
-  e2_idx = raw_example.entity2.first
+  e1_idx = raw_example['entity1'].first
+  e2_idx = raw_example['entity2'].first
 
   position1 = []
   position2 = []
-  length = len(raw_example.sentence)
+  length = len(raw_example['sentence'])
   for i in range(length):
     position1.append(distance(i-e1_idx))
     position2.append(distance(i-e2_idx))
   
   return position1, position2
 
-def build_sequence_example(raw_example):
+def _build_sequence_example(raw_example):
   '''build tf.train.SequenceExample from Raw_Example
-  context features : lexical, rid, direction (mtl)
+  context features : lexical, rid
   sequence features: sentence, position1, position2
 
   Args: 
-    raw_example : type Raw_Example
+    raw_example : type Raw_Example._asdict()
 
   Returns:
     tf.trian.SequenceExample
@@ -130,10 +139,10 @@ def build_sequence_example(raw_example):
   lexical = _lexical_feature(raw_example)
   ex.context.feature['lexical'].int64_list.value.extend(lexical)
 
-  rid = raw_example.label
+  rid = raw_example['label']
   ex.context.feature['rid'].int64_list.value.append(rid)
 
-  for word_id in raw_example.sentence:
+  for word_id in raw_example['sentence']:
     word = ex.feature_lists.feature_list['sentence'].feature.add()
     word.int64_list.value.append(word_id)
   
@@ -147,9 +156,24 @@ def build_sequence_example(raw_example):
 
   return ex
 
+def write_as_tfrecord(train_data, test_data, vocab2id):
+  '''convert the raw data to TFRecord format and write to disk
+  '''
+  util.write_as_tfrecord(train_data, 
+                         vocab2id, 
+                         FLAGS.semeval_train_record, 
+                         FLAGS.semeval_max_len, 
+                         _build_sequence_example)
+  util.write_as_tfrecord(test_data, 
+                         vocab2id, 
+                         FLAGS.semeval_test_record, 
+                         FLAGS.semeval_max_len, 
+                         _build_sequence_example)
+
+
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors
-  context features : lexical, rid, direction (mtl)
+  context features : lexical, rid
   sequence features: sentence, position1, position2
   '''
   context_features={
@@ -172,6 +196,20 @@ def _parse_tfexample(serialized_example):
   rid = context_dict['rid']
 
   return lexical, rid, sentence, position1, position2
+
+def read_tfrecord(epoch, batch_size):
+  train_data = util.read_tfrecord(FLAGS.semeval_train_record, 
+                              epoch, 
+                              batch_size, 
+                              _parse_tfexample,
+                              shuffle=True)
+  test_data = util.read_tfrecord(FLAGS.semeval_test_record, 
+                              epoch, 
+                              2717, 
+                              _parse_tfexample,
+                              shuffle=False)
+
+  return train_data, test_data
 
 def write_results(predictions, relations_file, results_file):
   relations = []
