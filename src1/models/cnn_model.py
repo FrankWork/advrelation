@@ -1,7 +1,17 @@
 import tensorflow as tf
 from models.base_model import BaseModel
 
-FLAGS = tf.app.flags.FLAGS
+flags = tf.app.flags
+flags.DEFINE_integer("num_relations", 19, "number of relations")
+flags.DEFINE_integer("pos_num", 123, "number of position feature")
+flags.DEFINE_integer("pos_dim", 5, "position embedding size")
+flags.DEFINE_integer("num_filters", 100, "cnn number of output unit")
+
+flags.DEFINE_float("l2_coef", 0.01, "l2 loss coefficient")
+flags.DEFINE_float("lrn_rate", 1e-3, "learning rate")
+flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
+
+FLAGS = flags.FLAGS
 
 def linear_layer(name, x, in_size, out_size, is_regularize=False):
   with tf.variable_scope(name):
@@ -15,9 +25,9 @@ def linear_layer(name, x, in_size, out_size, is_regularize=False):
       loss_l2 += tf.nn.l2_loss(w) + tf.nn.l2_loss(b)
     return o, loss_l2
 
-def cnn_forward(name, sent_pos, lexical, num_filters):
+def conv_layer(name, input, max_len):
   with tf.variable_scope(name):
-    input = tf.expand_dims(sent_pos, axis=-1)
+    input = tf.expand_dims(input, axis=-1)
     input_dim = input.shape.as_list()[2]
 
     # convolutional layer
@@ -25,105 +35,102 @@ def cnn_forward(name, sent_pos, lexical, num_filters):
     for filter_size in [3,4,5]:
       with tf.variable_scope('conv-%s' % filter_size):
         conv_weight = tf.get_variable('W1', 
-                            [filter_size, input_dim, 1, num_filters],
-                            initializer=tf.truncated_normal_initializer(stddev=0.1))
-        conv_bias = tf.get_variable('b1', [num_filters], 
-                              initializer=tf.constant_initializer(0.1))
+                        [filter_size, input_dim, 1, FLAGS.num_filters],
+                        initializer=tf.truncated_normal_initializer(stddev=0.1))
+        conv_bias = tf.get_variable('b1', [FLAGS.num_filters], 
+                        initializer=tf.constant_initializer(0.1))
         conv = tf.nn.conv2d(input,
-                            conv_weight,
-                            strides=[1, 1, input_dim, 1],
-                            padding='SAME')
-        conv = tf.nn.relu(conv + conv_bias) # batch_size, max_len, 1, num_filters
-        max_len = FLAGS.max_len
+                        conv_weight,
+                        strides=[1, 1, input_dim, 1],
+                        padding='SAME')
+        conv = tf.nn.relu(conv + conv_bias) # batch_size,max_len,1,num_filters
         pool = tf.nn.max_pool(conv, 
-                              ksize= [1, max_len, 1, 1], 
-                              strides=[1, max_len, 1, 1], 
-                              padding='SAME') # batch_size, 1, 1, num_filters
+                        ksize= [1, max_len, 1, 1], 
+                        strides=[1, max_len, 1, 1], 
+                        padding='SAME') # batch_size,1,1,num_filters
         pool_outputs.append(pool)
-    pools = tf.reshape(tf.concat(pool_outputs, 3), [-1, 3*num_filters])
+    pools = tf.reshape(tf.concat(pool_outputs, 3), [-1, 3*FLAGS.num_filters])
 
-    # feature 
-    feature = pools
-    if lexical is not None:
-      feature = tf.concat([lexical, feature], axis=1)
-    return feature
+    return pools
 
 
-class CNNModel(BaseModel):
-  '''
-  Relation Classification via Convolutional Deep Neural Network
-  http://www.aclweb.org/anthology/C14-1220
-  '''
+class MTLModel(BaseModel):
+  '''Multi Task Learning'''
 
-  def __init__(self, word_embed, data, word_dim, 
-              pos_num, pos_dim, num_relations,
-              keep_prob, num_filters,
-              lrn_rate, is_train):
+  def __init__(self, word_embed, semeval_data, imdb_data, is_train):
     # input data
-    lexical, rid, sentence, pos1, pos2 = data
+    self.semeval_data = semeval_data
+    self.imdb_data = imdb_data
+    self.is_train
 
     # embedding initialization
     w_trainable = True if FLAGS.word_dim==50 else False
-    word_embed = tf.get_variable('word_embed', 
-                      initializer=word_embed,
-                      dtype=tf.float32,
-                      trainable=w_trainable)
-    pos1_embed = tf.get_variable('pos1_embed', shape=[pos_num, pos_dim])
-    pos2_embed = tf.get_variable('pos2_embed', shape=[pos_num, pos_dim])
+    self.word_embed = tf.get_variable('word_embed', 
+                                      initializer=word_embed,
+                                      dtype=tf.float32,
+                                      trainable=w_trainable)
+    pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]  
+    self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
+    self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
+  def build_semeval_graph(self):
+    lexical, rid, sentence, pos1, pos2 = self.semeval_data
 
-    # # embedding lookup
-    lexical = tf.nn.embedding_lookup(word_embed, lexical) # batch_size, 6, word_dim
-    lexical = tf.reshape(lexical, [-1, 6*word_dim])
-    self.labels = tf.one_hot(rid, num_relations)       # batch_size, num_relations
+    # embedding lookup
+    lexical = tf.nn.embedding_lookup(self.word_embed, lexical)
+    lexical = tf.reshape(lexical, [-1, 6*FLAGS.word_dim])
+    labels = tf.one_hot(rid, FLAGS.num_relations)
 
-    sentence = tf.nn.embedding_lookup(word_embed, sentence)   # batch_size, max_len, word_dim
-    pos1 = tf.nn.embedding_lookup(pos1_embed, pos1)       # batch_size, max_len, pos_dim
-    pos2 = tf.nn.embedding_lookup(pos2_embed, pos2)       # batch_size, max_len, pos_dim
+    sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
+    pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
+    pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
     # cnn model
     sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
-    if is_train:
-      sent_pos = tf.nn.dropout(sent_pos, keep_prob)
+    if self.is_train:
+      sent_pos = tf.nn.dropout(sent_pos, FLAGS.keep_prob)
     
-    feature = cnn_forward('cnn', sent_pos, lexical, num_filters)
+    conv = conv_layer('conv_semeval', sent_pos, FLAGS.semeval_max_len)
+    feature = tf.concat([lexical, conv], axis=1)
     feature_size = feature.shape.as_list()[1]
-    self.feature = feature
     
-    if is_train:
-      feature = tf.nn.dropout(feature, keep_prob)
+    if self.is_train:
+      feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 19 classes
-    logits, loss_l2 = linear_layer('linear_cnn', feature, 
-                                  feature_size, num_relations, 
+    logits, loss_l2 = linear_layer('linear_semeval', feature, 
+                                  feature_size, FLAGS.num_relations, 
                                   is_regularize=True)
 
     prediction = tf.nn.softmax(logits)
-    prediction = tf.argmax(prediction, axis=1)
-    accuracy = tf.equal(prediction, tf.argmax(self.labels, axis=1))
-    accuracy = tf.reduce_mean(tf.cast(accuracy, tf.float32))
+    self.semeval_prediction = tf.argmax(prediction, axis=1)
+
+    accuracy = tf.equal(self.semeval_prediction, tf.argmax(labels, axis=1))
+    self.semeval_accuracy = tf.reduce_mean(tf.cast(accuracy, tf.float32))
+
     loss_ce = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=self.labels, logits=logits))
+        tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits))
 
-    self.logits = logits
-    self.prediction = prediction
-    self.accuracy = accuracy
-    self.loss = loss_ce + 0.01*loss_l2
+    self.semeval_loss = loss_ce + FLAGS.l2_coef*loss_l2
 
-    if not is_train:
-      return 
+  def build_imdb_graph(self):
+    label, sentence = self.imdb_train
 
-    # global_step = tf.train.get_or_create_global_step()
-    global_step = tf.Variable(0, trainable=False, name='step', dtype=tf.int32)
-    optimizer = tf.train.AdamOptimizer(lrn_rate)
 
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    with tf.control_dependencies(update_ops):# for batch_norm
-      self.train_op = optimizer.minimize(self.loss, global_step)
-    self.global_step = global_step
 
-  
 
+
+
+
+
+def optimize():
+  global_step = tf.Variable(0, trainable=False, name='step', dtype=tf.int32)
+  optimizer = tf.train.AdamOptimizer(lrn_rate)
+
+  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+  with tf.control_dependencies(update_ops):# for batch_norm
+    self.train_op = optimizer.minimize(self.loss, global_step)
+  self.global_step = global_step
 
 def build_train_valid_model(word_embed, train_data, test_data):
   '''Relation Classification via Convolutional Deep Neural Network'''

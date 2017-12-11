@@ -16,17 +16,10 @@ flags = tf.app.flags
 
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
 
-flags.DEFINE_integer("num_relations", 19, "number of relations")
+
 flags.DEFINE_integer("word_dim", 50, "word embedding size")
 flags.DEFINE_integer("num_epochs", 200, "number of epochs")
 flags.DEFINE_integer("batch_size", 100, "batch size")
-
-flags.DEFINE_integer("pos_num", 123, "number of position feature")
-flags.DEFINE_integer("pos_dim", 5, "position embedding size")
-flags.DEFINE_integer("num_filters", 100, "cnn number of output unit")
-
-flags.DEFINE_float("lrn_rate", 1e-3, "learning rate")
-flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
 
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('trace', False, 'set True to test')
