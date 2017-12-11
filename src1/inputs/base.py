@@ -113,19 +113,31 @@ def trim_embeddings():
   word_embed = np.asarray(word_embed)
   np.save(trimed_embed_file, word_embed.astype(np.float32))
   
-def map_tokens_to_id(raw_data, vocab2id):
+def map_tokens_to_id(raw_data, vocab2id, max_len):
   '''inplace convert sentence from a list of tokens to a list of ids
   Args:
     raw_data: a list of Raw_Example
     vocab2id: dict<token, id> {token0: id0, ...}
   '''
+  pad_id = vocab2id[PAD_WORD]
   for raw_example in raw_data:
     sentence = copy.copy(raw_example.sentence)
     raw_example.sentence.clear()
+    sent_id = []
     for token in sentence:
       if token in vocab2id:
         tok_id = vocab2id[token]
-        raw_example.sentence.append(tok_id)
+        sent_id.append(tok_id)
+
+    n = len(sent_id)
+    if n > max_len:
+      sent_id = sent_id[:max_len]
+    else:
+      pad_n = max_len - n
+      sent_id.extend(pad_n*[pad_id])
+    
+    raw_example.sentence.extend(sent_id)
+    del sent_id
     del sentence
 
 def write_tfrecord(record_data, filename):
@@ -138,9 +150,10 @@ def write_tfrecord(record_data, filename):
   for record in record_data:
     writer.write(record.SerializeToString())
   writer.close()
+  del record_data
 
 
-def read_tfrecord_to_batch(filename, epoch, batch_size, pad_value, shuffle=True):
+def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
   '''read TFRecord file to get batch tensors for tensorflow models
 
   Returns:
@@ -149,37 +162,16 @@ def read_tfrecord_to_batch(filename, epoch, batch_size, pad_value, shuffle=True)
   with tf.device('/cpu:0'):
     dataset = tf.data.TFRecordDataset([filename])
     # Parse the record into tensors
-    dataset = dataset.map(_parse_tfexample) 
+    dataset = dataset.map(parse_func)
     dataset = dataset.repeat(epoch)
     if shuffle:
       dataset = dataset.shuffle(buffer_size=100)
     
-    # [] for no padding, [None] for padding to maximum length
-    # n = FLAGS.max_len
-    # if FLAGS.model == 'mtl':
-    #   # lexical, rid, direction, sentence, position1, position2
-    #   padded_shapes = ([None,], [], [], [n], [n], [n])
-    # else:
-    #   # lexical, rid, sentence, position1, position2
-    #   padded_shapes = ([None,], [], [n], [n], [n])
-    # pad_value = tf.convert_to_tensor(pad_value)
-    # dataset = dataset.padded_batch(batch_size, padded_shapes,
-    #                                padding_values=pad_value)
     dataset = dataset.batch(batch_size)
     
     iterator = dataset.make_one_shot_iterator()
     batch = iterator.get_next()
     return batch
 
-def inputs():
-
-  train_data = read_tfrecord_to_batch(train_record, 
-                              FLAGS.num_epochs, FLAGS.batch_size, 
-                              pad_value, shuffle=True)
-  test_data = read_tfrecord_to_batch(test_record, 
-                              FLAGS.num_epochs, 2717, 
-                              pad_value, shuffle=False)
-
-  return train_data, test_data, word_embed
 
 

@@ -20,6 +20,8 @@ flags.DEFINE_string("imdb_test_record", "data/generated/test.imdb.tfrecord",
 flags.DEFINE_integer('doc_count_threshold', 1, 'The minimum number of '
                      'documents a word or bigram should occur in to keep '
                      'it in the vocabulary.')
+flags.DEFINE_integer('imdb_max_len', 700, 'The maximum length of a sentence')
+
 FLAGS = flags.FLAGS
 
 MAX_VOCAB_SIZE = 100 * 1000
@@ -107,7 +109,7 @@ def _build_sequence_example(raw_example):
 def _write_as_tfrecord(raw_data, vocab2id, filename):
   '''convert the raw data to TFRecord format and write to disk
   '''
-  base.map_tokens_to_id(raw_data, vocab2id)
+  base.map_tokens_to_id(raw_data, vocab2id, FLAGS.imdb_max_len)
   records = []
   for raw_example in raw_data:
     example = _build_sequence_example(raw_example)
@@ -121,3 +123,28 @@ def write_as_tfrecord(train_data, test_data, vocab2id):
   '''
   _write_as_tfrecord(train_data, vocab2id, FLAGS.imdb_train_record)
   _write_as_tfrecord(test_data, vocab2id, FLAGS.imdb_test_record)
+
+def _parse_tfexample(serialized_example):
+  '''parse serialized tf.train.SequenceExample to tensors
+  context features : label
+  sequence features: sentence
+  '''
+  context_features={'label'    : tf.FixedLenFeature([], tf.int64)}
+  sequence_features={'sentence': tf.FixedLenSequenceFeature([], tf.int64)}
+  context_dict, sequence_dict = tf.parse_single_sequence_example(
+                      serialized_example,
+                      context_features   = context_features,
+                      sequence_features  = sequence_features)
+
+  sentence = sequence_dict['sentence']
+  label = context_dict['label']
+
+  return label, sentence
+
+def read_tfrecord(epoch, batch_size):
+  train_data = base.read_tfrecord(FLAGS.imdb_train_record, 
+                                  epoch, 
+                                  batch_size, 
+                                  _parse_tfexample, 
+                                  shuffle=True)
+  return train_data

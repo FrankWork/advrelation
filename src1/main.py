@@ -16,7 +16,6 @@ flags = tf.app.flags
 
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
 
-flags.DEFINE_integer("max_len", 96, "max length of sentences")
 flags.DEFINE_integer("num_relations", 19, "number of relations")
 flags.DEFINE_integer("word_dim", 50, "word embedding size")
 flags.DEFINE_integer("num_epochs", 200, "number of epochs")
@@ -60,7 +59,6 @@ def build_data():
 
   print('trimming pretrained embeddings')
   base.trim_embeddings()
-  
 
 def trace_runtime(sess, m_train):
   '''
@@ -134,9 +132,12 @@ def main(_):
     exit()
 
   with tf.Graph().as_default():
-    train_data, test_data, word_embed = base_reader.inputs()
-    
-    
+    word_embed = base.load_embedding()
+    semeval_train, semeval_test = semeval.read_tfrecord(
+                                                FLAGS.num_epochs, 
+                                                FLAGS.batch_size)
+    imdb_train = imdb.read_tfrecord(FLAGS.num_epochs, FLAGS.batch_size)
+
     m_train, m_valid = cnn_model.build_train_valid_model(word_embed, 
                                                       train_data, test_data)
     

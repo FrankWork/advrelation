@@ -24,6 +24,8 @@ flags.DEFINE_string("relations_file", "data/SemEval/relations.txt",
 flags.DEFINE_string("results_file", "data/generated/results.txt", 
                              "predicted results file")
 
+flags.DEFINE_integer("semeval_max_len", 98, "max length of sentences")
+
 FLAGS = flags.FLAGS
 
 
@@ -157,7 +159,7 @@ def _build_sequence_example(raw_example):
 def _write_as_tfrecord(raw_data, vocab2id, filename):
   '''convert the raw data to TFRecord format and write to disk
   '''
-  base.map_tokens_to_id(raw_data, vocab2id)
+  base.map_tokens_to_id(raw_data, vocab2id, FLAGS.semeval_max_len)
   records = []
   for raw_example in raw_data:
     example = _build_sequence_example(raw_example)
@@ -172,11 +174,9 @@ def write_as_tfrecord(train_data, test_data, vocab2id):
   _write_as_tfrecord(train_data, vocab2id, FLAGS.semeval_train_record)
   _write_as_tfrecord(test_data, vocab2id, FLAGS.semeval_test_record)
 
-
-
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors
-  context features : lexical, rid, direction (mtl)
+  context features : lexical, rid
   sequence features: sentence, position1, position2
   '''
   context_features={
@@ -199,6 +199,20 @@ def _parse_tfexample(serialized_example):
   rid = context_dict['rid']
 
   return lexical, rid, sentence, position1, position2
+
+def read_tfrecord(epoch, batch_size):
+  train_data = base.read_tfrecord(FLAGS.semeval_train_record, 
+                              epoch, 
+                              batch_size, 
+                              _parse_tfexample,
+                              shuffle=True)
+  test_data = base.read_tfrecord(FLAGS.semeval_test_record, 
+                              epoch, 
+                              2717, 
+                              _parse_tfexample,
+                              shuffle=False)
+
+  return train_data, test_data
 
 def write_results(predictions, relations_file, results_file):
   relations = []
