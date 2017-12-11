@@ -6,6 +6,7 @@ import numpy as np
 
 from inputs import base
 from inputs import imdb
+from inputs import semeval
 from models import cnn_model
 
 # tf.set_random_seed(0)
@@ -35,8 +36,31 @@ flags.DEFINE_boolean('build_data', False, 'set True to generate data')
 FLAGS = tf.app.flags.FLAGS
 
 def build_data():
-  imdb_vocab = imdb.build_imdb_vocab()
-  base.write_vocab(imdb_vocab)
+  '''load raw data, build vocab, build TFRecord data, trim embeddings
+  '''
+  print('load raw data')
+  imdb_train, imdb_test       = imdb.load_raw_data()
+  semeval_train, semeval_test = semeval.load_raw_data()
+
+  print('build vocab')
+  imdb_vocab   = imdb.build_vocab(imdb_train + imdb_test)
+  emeval_vocab = semeval.build_vocab(semeval_train + semeval_test)
+  vocab = imdb_vocab.union(emeval_vocab)
+  base.write_vocab(vocab)
+  del imdb_vocab
+  del emeval_vocab
+  del vocab
+
+  vocab2id = base.load_vocab2id()
+  print('convert semeval data to TFRecord')
+  semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
+  print('convert imdb data to TFRecord')
+  imdb.write_as_tfrecord(imdb_train, imdb_test, vocab2id)
+  del vocab2id
+
+  print('trimming pretrained embeddings')
+  base.trim_embeddings()
+  
 
 def trace_runtime(sess, m_train):
   '''

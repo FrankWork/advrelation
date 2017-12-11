@@ -3,20 +3,26 @@ import tensorflow as tf
 from collections import defaultdict
 from collections import namedtuple
 
+from inputs import base
+
 flags = tf.app.flags
 
-flags.DEFINE_string("train_file", "data/train.cln", 
+flags.DEFINE_string("semeval_train_file", "data/SemEval/train.cln", 
                              "original training file")
-flags.DEFINE_string("test_file", "data/test.cln", 
+flags.DEFINE_string("semeval_test_file", "data/SemEval/test.cln", 
                              "original test file")
 
-flags.DEFINE_string("train_record", "data/train.tfrecord", 
+flags.DEFINE_string("semeval_train_record", 
+                              "data/generated/train.semeval.tfrecord", 
                              "training file of TFRecord format")
-flags.DEFINE_string("test_record", "data/test.tfrecord", 
+flags.DEFINE_string("semeval_test_record", 
+                             "data/generated/test.semeval.tfrecord", 
                              "Test file of TFRecord format")
 
-flags.DEFINE_string("relations_file", "data/relations_new.txt", "relations file")
-flags.DEFINE_string("results_file", "data/results.txt", "predicted results file")
+flags.DEFINE_string("relations_file", "data/SemEval/relations.txt", 
+                             "relations file, map relation id to its text")
+flags.DEFINE_string("results_file", "data/generated/results.txt", 
+                             "predicted results file")
 
 FLAGS = flags.FLAGS
 
@@ -25,7 +31,7 @@ Raw_Example = namedtuple('Raw_Example', 'label entity1 entity2 sentence')
 PositionPair = namedtuple('PosPair', 'first last')
 
 
-def load_raw_data(filename):
+def _load_raw_data(filename):
   '''load raw data from text file, 
 
   return: a list of Raw_Example
@@ -46,18 +52,19 @@ def load_raw_data(filename):
       data.append(example)
   return data
 
-def build_semeval_vocab(raw_data, raw_test_data):
-  '''collect words in sentence'''
-  if not os.path.exists(FLAGS.vocab_file):
-    vocab = set()
-    for example in raw_train_data + raw_test_data:
-      for w in example.sentence:
-          vocab.add(w)
+def load_raw_data():
+  train_data = _load_raw_data(FLAGS.semeval_train_file)
+  test_data = _load_raw_data(FLAGS.semeval_test_file)
+  return train_data, test_data
 
-    with open(FLAGS.vocab_file, 'w') as f:
-      for w in sorted(list(vocab)):
-        f.write('%s\n' % w)
-      f.write('%s\n' % PAD_WORD)
+def build_vocab(raw_data):
+  '''collect words in sentence'''
+  vocab = set()
+  for example in raw_data:
+    for w in example.sentence:
+        vocab.add(w)
+
+  return vocab
 
 def _lexical_feature(raw_example):
   def _entity_context(e_idx, sent):
@@ -114,9 +121,9 @@ def _position_feature(raw_example):
   
   return position1, position2
 
-def build_sequence_example(raw_example):
+def _build_sequence_example(raw_example):
   '''build tf.train.SequenceExample from Raw_Example
-  context features : lexical, rid, direction (mtl)
+  context features : lexical, rid
   sequence features: sentence, position1, position2
 
   Args: 
@@ -146,6 +153,26 @@ def build_sequence_example(raw_example):
     pos.int64_list.value.append(pos_val)
 
   return ex
+
+def _write_as_tfrecord(raw_data, vocab2id, filename):
+  '''convert the raw data to TFRecord format and write to disk
+  '''
+  base.map_tokens_to_id(raw_data, vocab2id)
+  records = []
+  for raw_example in raw_data:
+    example = _build_sequence_example(raw_example)
+    records.append(example)
+  del raw_data
+   
+  base.write_tfrecord(records, filename)
+
+def write_as_tfrecord(train_data, test_data, vocab2id):
+  '''convert the raw data to TFRecord format and write to disk
+  '''
+  _write_as_tfrecord(train_data, vocab2id, FLAGS.semeval_train_record)
+  _write_as_tfrecord(test_data, vocab2id, FLAGS.semeval_test_record)
+
+
 
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors
