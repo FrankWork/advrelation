@@ -3,7 +3,7 @@ import tensorflow as tf
 from collections import defaultdict
 from collections import namedtuple
 
-from inputs import base
+from inputs import util
 
 flags = tf.app.flags
 
@@ -39,7 +39,7 @@ def _load_raw_data_from_dir(dir, neg_or_pos):
     with open(filename) as f:
       lines = f.readlines()
       assert len(lines) == 1
-      tokens = base.wordpunct_tokenizer(lines[0].lower())
+      tokens = util.wordpunct_tokenizer(lines[0].lower())
 
       example = Raw_Example(label, tokens)
       data.append(example)
@@ -90,39 +90,35 @@ def _build_sequence_example(raw_example):
   sequence features: sentence
 
   Args: 
-    raw_example : type Raw_Example
+    raw_example : type Raw_Example._asdict()
 
   Returns:
     tf.trian.SequenceExample
   '''
   ex = tf.train.SequenceExample()
 
-  label = raw_example.label
+  label = raw_example['label']
   ex.context.feature['label'].int64_list.value.append(label)
 
-  for word_id in raw_example.sentence:
+  for word_id in raw_example['sentence']:
     word = ex.feature_lists.feature_list['sentence'].feature.add()
     word.int64_list.value.append(word_id)
   
   return ex
 
-def _write_as_tfrecord(raw_data, vocab2id, filename):
-  '''convert the raw data to TFRecord format and write to disk
-  '''
-  base.map_tokens_to_id(raw_data, vocab2id, FLAGS.imdb_max_len)
-  records = []
-  for raw_example in raw_data:
-    example = _build_sequence_example(raw_example)
-    records.append(example)
-  del raw_data
-  
-  base.write_tfrecord(records, filename)
-
 def write_as_tfrecord(train_data, test_data, vocab2id):
   '''convert the raw data to TFRecord format and write to disk
   '''
-  _write_as_tfrecord(train_data, vocab2id, FLAGS.imdb_train_record)
-  _write_as_tfrecord(test_data, vocab2id, FLAGS.imdb_test_record)
+  util.write_as_tfrecord(train_data, 
+                         vocab2id, 
+                         FLAGS.imdb_train_record, 
+                         FLAGS.imdb_max_len, 
+                         _build_sequence_example)
+  util.write_as_tfrecord(test_data, 
+                         vocab2id, 
+                         FLAGS.imdb_test_record, 
+                         FLAGS.imdb_max_len, 
+                         _build_sequence_example)
 
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors
@@ -142,7 +138,7 @@ def _parse_tfexample(serialized_example):
   return label, sentence
 
 def read_tfrecord(epoch, batch_size):
-  train_data = base.read_tfrecord(FLAGS.imdb_train_record, 
+  train_data = util.read_tfrecord(FLAGS.imdb_train_record, 
                                   epoch, 
                                   batch_size, 
                                   _parse_tfexample, 

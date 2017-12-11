@@ -3,7 +3,7 @@ import tensorflow as tf
 from collections import defaultdict
 from collections import namedtuple
 
-from inputs import base
+from inputs import util
 
 flags = tf.app.flags
 
@@ -88,11 +88,11 @@ def _lexical_feature(raw_example):
     return context
 
     
-  e1_idx = raw_example.entity1.first
-  e2_idx = raw_example.entity2.first
+  e1_idx = raw_example['entity1'].first
+  e2_idx = raw_example['entity2'].first
 
-  context1 = _entity_context(e1_idx, raw_example.sentence)
-  context2 = _entity_context(e2_idx, raw_example.sentence)
+  context1 = _entity_context(e1_idx, raw_example['sentence'])
+  context2 = _entity_context(e2_idx, raw_example['sentence'])
 
   # ignore WordNet hypernyms in paper
   lexical = context1 + context2
@@ -111,12 +111,12 @@ def _position_feature(raw_example):
     
     return 122
 
-  e1_idx = raw_example.entity1.first
-  e2_idx = raw_example.entity2.first
+  e1_idx = raw_example['entity1'].first
+  e2_idx = raw_example['entity2'].first
 
   position1 = []
   position2 = []
-  length = len(raw_example.sentence)
+  length = len(raw_example['sentence'])
   for i in range(length):
     position1.append(distance(i-e1_idx))
     position2.append(distance(i-e2_idx))
@@ -129,7 +129,7 @@ def _build_sequence_example(raw_example):
   sequence features: sentence, position1, position2
 
   Args: 
-    raw_example : type Raw_Example
+    raw_example : type Raw_Example._asdict()
 
   Returns:
     tf.trian.SequenceExample
@@ -139,10 +139,10 @@ def _build_sequence_example(raw_example):
   lexical = _lexical_feature(raw_example)
   ex.context.feature['lexical'].int64_list.value.extend(lexical)
 
-  rid = raw_example.label
+  rid = raw_example['label']
   ex.context.feature['rid'].int64_list.value.append(rid)
 
-  for word_id in raw_example.sentence:
+  for word_id in raw_example['sentence']:
     word = ex.feature_lists.feature_list['sentence'].feature.add()
     word.int64_list.value.append(word_id)
   
@@ -156,23 +156,20 @@ def _build_sequence_example(raw_example):
 
   return ex
 
-def _write_as_tfrecord(raw_data, vocab2id, filename):
-  '''convert the raw data to TFRecord format and write to disk
-  '''
-  base.map_tokens_to_id(raw_data, vocab2id, FLAGS.semeval_max_len)
-  records = []
-  for raw_example in raw_data:
-    example = _build_sequence_example(raw_example)
-    records.append(example)
-  del raw_data
-   
-  base.write_tfrecord(records, filename)
-
 def write_as_tfrecord(train_data, test_data, vocab2id):
   '''convert the raw data to TFRecord format and write to disk
   '''
-  _write_as_tfrecord(train_data, vocab2id, FLAGS.semeval_train_record)
-  _write_as_tfrecord(test_data, vocab2id, FLAGS.semeval_test_record)
+  util.write_as_tfrecord(train_data, 
+                         vocab2id, 
+                         FLAGS.semeval_train_record, 
+                         FLAGS.semeval_max_len, 
+                         _build_sequence_example)
+  util.write_as_tfrecord(test_data, 
+                         vocab2id, 
+                         FLAGS.semeval_test_record, 
+                         FLAGS.semeval_max_len, 
+                         _build_sequence_example)
+
 
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors
@@ -201,12 +198,12 @@ def _parse_tfexample(serialized_example):
   return lexical, rid, sentence, position1, position2
 
 def read_tfrecord(epoch, batch_size):
-  train_data = base.read_tfrecord(FLAGS.semeval_train_record, 
+  train_data = util.read_tfrecord(FLAGS.semeval_train_record, 
                               epoch, 
                               batch_size, 
                               _parse_tfexample,
                               shuffle=True)
-  test_data = base.read_tfrecord(FLAGS.semeval_test_record, 
+  test_data = util.read_tfrecord(FLAGS.semeval_test_record, 
                               epoch, 
                               2717, 
                               _parse_tfexample,

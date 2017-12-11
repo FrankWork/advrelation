@@ -4,7 +4,7 @@ import sys
 import tensorflow as tf
 import numpy as np
 
-from inputs import base
+from inputs import util
 from inputs import imdb
 from inputs import semeval
 from models import cnn_model
@@ -45,12 +45,12 @@ def build_data():
   imdb_vocab   = imdb.build_vocab(imdb_train + imdb_test)
   emeval_vocab = semeval.build_vocab(semeval_train + semeval_test)
   vocab = imdb_vocab.union(emeval_vocab)
-  base.write_vocab(vocab)
+  util.write_vocab(vocab)
   del imdb_vocab
   del emeval_vocab
   del vocab
 
-  vocab2id = base.load_vocab2id()
+  vocab2id = util.load_vocab2id()
   print('convert semeval data to TFRecord')
   semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
   print('convert imdb data to TFRecord')
@@ -58,7 +58,7 @@ def build_data():
   del vocab2id
 
   print('trimming pretrained embeddings')
-  base.trim_embeddings()
+  util.trim_embeddings()
 
 def trace_runtime(sess, m_train):
   '''
@@ -123,7 +123,7 @@ def test(sess, m_valid):
   accuracy, predictions = sess.run(fetches)
   print('accuracy: %.4f' % accuracy)
   
-  base_reader.write_results(predictions, FLAGS.relations_file, FLAGS.results_file)
+  semeval.write_results(predictions, FLAGS.relations_file, FLAGS.results_file)
 
 
 def main(_):
@@ -132,7 +132,7 @@ def main(_):
     exit()
 
   with tf.Graph().as_default():
-    word_embed = base.load_embedding()
+    word_embed = util.load_embedding()
     semeval_train, semeval_test = semeval.read_tfrecord(
                                                 FLAGS.num_epochs, 
                                                 FLAGS.batch_size)

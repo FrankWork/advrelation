@@ -4,7 +4,6 @@ import numpy as np
 import tensorflow as tf
 from collections import defaultdict
 from collections import namedtuple
-import copy
 
 flags = tf.app.flags
 
@@ -113,44 +112,58 @@ def trim_embeddings():
   word_embed = np.asarray(word_embed)
   np.save(trimed_embed_file, word_embed.astype(np.float32))
   
-def map_tokens_to_id(raw_data, vocab2id, max_len):
+def _map_tokens_to_ids(raw_example, vocab2id):
   '''inplace convert sentence from a list of tokens to a list of ids
   Args:
-    raw_data: a list of Raw_Example
+    raw_example: an instance of Raw_Example._asdict()
     vocab2id: dict<token, id> {token0: id0, ...}
   '''
-  pad_id = vocab2id[PAD_WORD]
-  for raw_example in raw_data:
-    sentence = copy.copy(raw_example.sentence)
-    raw_example.sentence.clear()
-    sent_id = []
-    for token in sentence:
-      if token in vocab2id:
-        tok_id = vocab2id[token]
-        sent_id.append(tok_id)
+  sent_id = []
+  for token in raw_example['sentence']:
+    if token in vocab2id:
+      tok_id = vocab2id[token]
+      sent_id.append(tok_id)
+  raw_example['sentence'] = sent_id
 
-    n = len(sent_id)
-    if n > max_len:
-      sent_id = sent_id[:max_len]
-    else:
-      pad_n = max_len - n
-      sent_id.extend(pad_n*[pad_id])
+def _pad_or_truncate(raw_example, max_len, pad_id):
+  '''inplace pad or truncate a sentence to max_len
+  Args:
+    raw_example: an instance of Raw_Example._asdict()
+    max_len: int
+    pad_id: token id of PAD_WORD
+  '''
+  # truncate if len(sentence) > max_len
+  # else nothing happens
+  raw_example['sentence'] = raw_example['sentence'][:max_len]
+
+  # pad if len(sentence) < max_len
+  # else nothing happens
+  pad_n = max_len - len(raw_example['sentence'])
+  raw_example['sentence'].extend(pad_n*[pad_id])
     
-    raw_example.sentence.extend(sent_id)
-    del sent_id
-    del sentence
-
-def write_tfrecord(record_data, filename):
-  '''write TFRecord format data to file.
+def write_as_tfrecord(raw_data, vocab2id, filename, max_len, build_func):
+  '''convert the raw data to TFRecord format and write to disk
 
   Args:
-    record_data: a list of 'tf.train.SequenceExample'
+    raw_data: a list of Raw_Example
+    vocab2id: dict<token, id>
+    filename: file to write in
+    max_len: int, pad or truncate sentence to max_len
+    build_func: function to convert Raw_Example to tf.train.SequenceExample
   '''
   writer = tf.python_io.TFRecordWriter(filename)
-  for record in record_data:
-    writer.write(record.SerializeToString())
+  pad_id = vocab2id[PAD_WORD]
+  
+  for raw_example in raw_data:
+    raw_example = raw_example._asdict()
+
+    _map_tokens_to_ids(raw_example, vocab2id)
+    _pad_or_truncate  (raw_example, max_len, pad_id)
+    
+    example = build_func(raw_example)
+    writer.write(example.SerializeToString())
   writer.close()
-  del record_data
+  del raw_data
 
 
 def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
