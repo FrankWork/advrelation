@@ -31,6 +31,7 @@ flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('trace', False, 'set True to test')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
+flags.DEFINE_boolean('trim_embed', False, 'set True to trim pretrained embedding')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -55,8 +56,8 @@ def build_data():
   semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
   print('convert imdb data to TFRecord')
   imdb.write_as_tfrecord(imdb_train, imdb_test, vocab2id)
-  del vocab2id
 
+def trim_embed():
   print('trimming pretrained embeddings')
   util.trim_embeddings()
 
@@ -125,10 +126,12 @@ def test(sess, m_valid):
   
   semeval.write_results(predictions, FLAGS.relations_file, FLAGS.results_file)
 
-
 def main(_):
   if FLAGS.build_data:
     build_data()
+    exit()
+  elif FLAGS.trim_embed:
+    trim_embed()
     exit()
 
   with tf.Graph().as_default():
@@ -162,8 +165,5 @@ def main(_):
       else:
         train(sess, m_train, m_valid)
 
-      
-  
-          
 if __name__ == '__main__':
   tf.app.run()
