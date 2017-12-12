@@ -211,15 +211,15 @@ def read_tfrecord(epoch, batch_size):
 
   return train_data, test_data
 
-def write_results(predictions, relations_file, results_file):
+def write_results(predictions):
   relations = []
-  with open(relations_file) as f:
+  with open(FLAGS.relations_file) as f:
     for line in f:
       segment = line.strip().split()
       relations.append(segment[1])
   
   start_no = 8001
-  with open(results_file, 'w') as f:
+  with open(FLAGS.results_file, 'w') as f:
     for idx, id in enumerate(predictions):
       rel = relations[id]
       f.write('%d\t%s\n' % (start_no+idx, rel))

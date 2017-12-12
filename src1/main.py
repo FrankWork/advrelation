@@ -7,7 +7,7 @@ import numpy as np
 from inputs import util
 from inputs import imdb
 from inputs import semeval
-from models import cnn_model
+from models import mtl_model
 
 # tf.set_random_seed(0)
 # np.random.seed(0)
@@ -76,35 +76,50 @@ def trace_runtime(sess, m_train):
   trace_file.close()
 
 def train(sess, m_train, m_valid):
-  n = 1
-  best = .0
-  best_step = n
+  imdb_train_fetch =    [m_train.imdb_train, 
+                         m_train.imdb_loss, m_train.imdb_accuracy]
+  semeval_train_fetch = [m_train.semeval_train, 
+                         m_train.semeval_loss, m_train.semeval_accuracy]
+
+  best_acc, best_step= 0., 0
   start_time = time.time()
   orig_begin_time = start_time
 
-  fetches = [m_train.train_op, m_train.loss, m_train.accuracy]
+  for epoch in range(FLAGS.num_epochs):
+    # train imdb
+    imdb_loss, imdb_acc = 0., 0.
+    for batch in range(250):
+      _, loss, acc = sess.run(imdb_train_fetch)
+      imdb_loss += loss
+      imdb_acc += acc
+    imdb_loss /= 250
+    imdb_acc /= 250
 
-  while True:
-    try:
-      _, loss, acc = sess.run(fetches)
+    # train SemEval
+    sem_loss, sem_acc = 0., 0.
+    for batch in range(80):
+      _, loss, acc = sess.run(semeval_train_fetch)
+      sem_loss += loss
+      sem_acc += acc
+    sem_loss /= 80
+    sem_acc /= 80
 
-      epoch = n // 80
-      if n % 80 == 0:
-        now = time.time()
-        duration = now - start_time
-        start_time = now
-        v_acc = sess.run(m_valid.accuracy)
-        if best < v_acc:
-          best = v_acc
-          best_step = n
-          m_train.save(sess, best_step)
-        print("Epoch %d, loss %.2f, acc %.2f %.4f, time %.2f" % 
-                                  (epoch, loss, acc, v_acc, duration))
-        sys.stdout.flush()
-      n += 1
-    except tf.errors.OutOfRangeError:
-      break
+    # epoch duration
+    now = time.time()
+    duration = now - start_time
+    start_time = now
 
+    # valid accuracy
+    sem_valid_acc = sess.run(m_valid.semeval_accuracy)
+    if best_acc < sem_valid_acc:
+      best_acc = sem_valid_acc
+      best_step = sess.run(m_train.global_step)
+      m_train.save(sess, best_step)
+    
+    print("Epoch %d, imdb_loss_acc %.2f %.2f sem_loss_acc %.2f %.2f, valid_acc %.4f time %.2f" % 
+             (epoch, imdb_loss, imdb_acc, sem_loss, sem_acc, sem_valid_acc, duration))
+    sys.stdout.flush()
+  
   duration = time.time() - orig_begin_time
   duration /= 3600
   print('Done training, best_step: %d, best_acc: %.4f' % (best_step, best))
@@ -113,11 +128,11 @@ def train(sess, m_train, m_valid):
 
 def test(sess, m_valid):
   m_valid.restore(sess)
-  fetches = [m_valid.accuracy, m_valid.prediction]
+  fetches = [m_valid.semeval_accuracy, m_valid.semeval_pred]
   accuracy, predictions = sess.run(fetches)
   print('accuracy: %.4f' % accuracy)
   
-  semeval.write_results(predictions, FLAGS.relations_file, FLAGS.results_file)
+  semeval.write_results(predictions)
 
 def main(_):
   if FLAGS.build_data:
@@ -127,26 +142,27 @@ def main(_):
     trim_embed()
     exit()
 
+  word_embed = util.load_embedding()
   with tf.Graph().as_default():
-    word_embed = util.load_embedding()
     semeval_train, semeval_test = semeval.read_tfrecord(
-                                                FLAGS.num_epochs, 
-                                                FLAGS.batch_size)
-    imdb_train = imdb.read_tfrecord(FLAGS.num_epochs, FLAGS.batch_size)
+                                          FLAGS.num_epochs, FLAGS.batch_size)
+    imdb_train, imdb_test = imdb.read_tfrecord(
+                                          FLAGS.num_epochs, FLAGS.batch_size)
 
-    m_train, m_valid = cnn_model.build_train_valid_model(word_embed, 
-                                                      train_data, test_data)
+    m_train, m_valid = mtl_model.build_train_valid_model(
+                                          word_embed, 
+                                          semeval_train, semeval_test, 
+                                          imdb_train, imdb_test)
+    m_train.set_saver('mtl-%d-%d' % (FLAGS.num_epochs, FLAGS.word_dim))
     
-    m_train.set_saver('cnn-%d-%d' % (FLAGS.num_epochs, FLAGS.word_dim))
-    
+    m_train.build_train_op()
+
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
 
     config = tf.ConfigProto()
-    # config.gpu_options.per_process_gpu_memory_fraction = 0.9 # 占用GPU90%的显存 
     config.gpu_options.allow_growth = True
     
-    # sv finalize the graph
     with tf.Session(config=config) as sess:
       sess.run(init_op)
       print('='*80)

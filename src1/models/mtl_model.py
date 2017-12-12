@@ -33,7 +33,8 @@ def linear_layer(name, x, in_size, out_size, is_regularize=False):
     return o, loss_l2
 
 class ConvLayer(tf.layers.Layer):
-
+  '''inherit tf.layers.Layer to cache trainable variables
+  '''
   def __init__(self, layer_name, filter_sizes, **kwargs):
     self.layer_name = layer_name
     self.filter_sizes = filter_sizes
@@ -41,12 +42,14 @@ class ConvLayer(tf.layers.Layer):
     super(ConvLayer, self).__init__(**kwargs)
   
   def build(self, input_shape):
+    input_dim = input_shape[2]
+
     with tf.variable_scope(self.layer_name):
       w_init = tf.truncated_normal_initializer(stddev=0.1)
       b_init = tf.constant_initializer(0.1)
 
       for fsize in self.filter_sizes:
-        w_shape = [fsize, FLAGS.word_dim, 1, FLAGS.num_filters]
+        w_shape = [fsize, input_dim, 1, FLAGS.num_filters]
         b_shape = [FLAGS.num_filters]
         w_name = 'conv-W%d' % fsize
         b_name = 'conv-b%d' % fsize
@@ -56,33 +59,38 @@ class ConvLayer(tf.layers.Layer):
                                            b_name, b_shape, initializer=b_init)
     
       super(ConvLayer, self).build(input_shape)
-  
-  def set_max_len(max_len):
-    self.max_len = max_len
 
   def call(self, x):
     x = tf.expand_dims(x, axis=-1)
-    pool_outputs = []
-
+    input_dim = x.shape.as_list()[2]
+    conv_outs = []
     for fsize in self.filter_sizes:
       w_name = 'conv-W%d' % fsize
       b_name = 'conv-b%d' % fsize
       
       conv = tf.nn.conv2d(x,
                         self.conv[w_name],
-                        strides=[1, 1, FLAGS.word_dim, 1],
+                        strides=[1, 1, input_dim, 1],
                         padding='SAME')
       conv = tf.nn.relu(conv + self.conv[b_name]) # batch,max_len,1,filters
-      pool = tf.nn.max_pool(conv, 
-                        ksize= [1, self.max_len, 1, 1], 
-                        strides=[1, self.max_len, 1, 1], 
-                        padding='SAME') # batch,1,1,filters
-      pool_outputs.append(pool)
-    
-    n = len(self.filter_sizes)
-    pools = tf.reshape(tf.concat(pool_outputs, 3), [-1, n*FLAGS.num_filters])
+      conv_outs.append(conv)
+    return conv_outs
 
-    return pools
+def max_pool(conv_outs, max_len):
+  pool_outs = []
+
+  for conv in conv_outs:
+    pool = tf.nn.max_pool(conv, 
+                        ksize= [1, max_len, 1, 1], 
+                        strides=[1, max_len, 1, 1], 
+                        padding='SAME') # batch,1,1,filters
+    pool_outs.append(pool)
+    
+  n = len(conv_outs)
+  pools = tf.reshape(tf.concat(pool_outs, 3), [-1, n*FLAGS.num_filters])
+
+  return pools
+
 
 class MTLModel(BaseModel):
   '''Multi Task Learning'''
@@ -91,7 +99,7 @@ class MTLModel(BaseModel):
     # input data
     self.semeval_data = semeval_data
     self.imdb_data = imdb_data
-    self.is_train
+    self.is_train = is_train
 
     # embedding initialization
     w_trainable = True if FLAGS.word_dim==50 else False
@@ -104,8 +112,10 @@ class MTLModel(BaseModel):
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
     self.shared_layer = ConvLayer('conv_shared', FILTER_SIZES)
-    self.build_semeval_graph()
-    self.build_semeval_graph()
+    with tf.variable_scope('semeval_graph'):
+      self.build_semeval_graph()
+    with tf.variable_scope('imdb_graph'):
+      self.build_imdb_graph()
 
   def build_semeval_graph(self):
     lexical, labels, sentence, pos1, pos2 = self.semeval_data
@@ -119,16 +129,16 @@ class MTLModel(BaseModel):
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
     # cnn model
-    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
     if self.is_train:
-      sent_pos = tf.nn.dropout(sent_pos, FLAGS.keep_prob)
+      sentence = tf.nn.dropout(sentence, FLAGS.keep_prob)
+    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
     
     conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
-    conv_layer.set_max_len(FLAGS.semeval_max_len)
     conv_out = conv_layer(sent_pos)
+    conv_out = max_pool(conv_out, FLAGS.semeval_max_len)
 
-    self.shared_layer.set_max_len(FLAGS.semeval_max_len)
-    shared_out = self.shared_layer(sent_pos)
+    shared_out = self.shared_layer(sentence)
+    shared_out = max_pool(shared_out, FLAGS.semeval_max_len)
 
     feature = tf.concat([lexical, conv_out, shared_out], axis=1)
     if self.is_train:
@@ -153,18 +163,18 @@ class MTLModel(BaseModel):
     self.semeval_accuracy = tf.reduce_mean(acc)
 
   def build_imdb_graph(self):
-    labels, sentence = self.imdb_train
+    labels, sentence = self.imdb_data
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
 
     if self.is_train:
       sentence = tf.nn.dropout(sentence, FLAGS.keep_prob)
     
     conv_layer = ConvLayer('conv_imdb', FILTER_SIZES)
-    conv_layer.set_max_len(FLAGS.imdb_max_len)
     conv_out = conv_layer(sentence)
+    conv_out = max_pool(conv_out, FLAGS.imdb_max_len)
 
-    self.shared_layer.set_max_len(FLAGS.imdb_max_len)
     shared_out = self.shared_layer(sentence)
+    shared_out = max_pool(shared_out, FLAGS.imdb_max_len)
 
     feature = tf.concat([conv_out, shared_out], axis=1)
     if self.is_train:
@@ -186,33 +196,30 @@ class MTLModel(BaseModel):
     self.imdb_loss = loss_ce + FLAGS.l2_coef*loss_l2
 
     self.imdb_pred = tf.cast(tf.greater(tf.squeeze(logits), 0.5), tf.int64)
-    acc = tf.cast(tf.equal(self.semeval_pred, labels), tf.float32)
+    acc = tf.cast(tf.equal(self.imdb_pred, labels), tf.float32)
     self.imdb_accuracy = tf.reduce_mean(acc)
 
-  def set_shared_max_len(self, max_len):
-    self.shared_layer.set_max_len(max_len)
+  def build_train_op(self):
+    if self.is_train:
+      self.global_step = tf.Variable(0, trainable=False, dtype=tf.int32)
+      self.semeval_train = optimize(self.semeval_loss, self.global_step)
+      self.imdb_train = optimize(self.imdb_loss, self.global_step)
 
-def optimize():
-  global_step = tf.Variable(0, trainable=False, name='step', dtype=tf.int32)
-  optimizer = tf.train.AdamOptimizer(lrn_rate)
+def optimize(loss, global_step):
+  optimizer = tf.train.AdamOptimizer(FLAGS.lrn_rate)
 
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):# for batch_norm
-    self.train_op = optimizer.minimize(self.loss, global_step)
-  self.global_step = global_step
+    train_op = optimizer.minimize(loss, global_step)
+  return train_op
 
-def build_train_valid_model(word_embed, train_data, test_data):
-  '''Relation Classification via Convolutional Deep Neural Network'''
+def build_train_valid_model(word_embed, 
+                            semeval_train, semeval_test, 
+                            imdb_train, imdb_test):
   with tf.name_scope("Train"):
-    with tf.variable_scope('CNNModel', reuse=None):
-      m_train = CNNModel( word_embed, train_data, FLAGS.word_dim,
-                    FLAGS.pos_num, FLAGS.pos_dim, FLAGS.num_relations,
-                    FLAGS.keep_prob, FLAGS.num_filters, 
-                    FLAGS.lrn_rate, is_train=True)
+    with tf.variable_scope('MTLModel', reuse=None):
+      m_train = MTLModel(word_embed, semeval_train, imdb_train, is_train=True)
   with tf.name_scope('Valid'):
-    with tf.variable_scope('CNNModel', reuse=True):
-      m_valid = CNNModel( word_embed, test_data, FLAGS.word_dim,
-                    FLAGS.pos_num, FLAGS.pos_dim, FLAGS.num_relations,
-                    1.0, FLAGS.num_filters, 
-                    FLAGS.lrn_rate, is_train=False)
+    with tf.variable_scope('MTLModel', reuse=True):
+      m_valid = MTLModel(word_embed, semeval_test, imdb_test, is_train=False)
   return m_train, m_valid

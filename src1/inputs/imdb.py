@@ -143,4 +143,10 @@ def read_tfrecord(epoch, batch_size):
                                   batch_size, 
                                   _parse_tfexample, 
                                   shuffle=True)
-  return train_data
+
+  test_data = util.read_tfrecord(FLAGS.imdb_test_record, 
+                                  epoch, 
+                                  batch_size, 
+                                  _parse_tfexample, 
+                                  shuffle=False)
+  return train_data, test_data
