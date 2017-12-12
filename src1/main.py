@@ -119,7 +119,8 @@ def train(sess, m_train, m_valid):
       m_train.save(sess, best_step)
     
     print("Epoch %d imdb %.2f %.2f %.4f sem %.2f %.2f %.4f time %.2f" % 
-             (epoch, imdb_loss, imdb_acc, sem_loss, sem_acc, sem_valid_acc, duration))
+             (epoch, imdb_loss, imdb_acc, imdb_valid_acc, 
+                      sem_loss, sem_acc, sem_valid_acc, duration))
     sys.stdout.flush()
   
   duration = time.time() - orig_begin_time
