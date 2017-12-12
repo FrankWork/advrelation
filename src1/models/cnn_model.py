@@ -2,10 +2,15 @@ import tensorflow as tf
 from models.base_model import BaseModel
 
 flags = tf.app.flags
-flags.DEFINE_integer("num_relations", 19, "number of relations")
+
+flags.DEFINE_integer("num_imdb_class", 2, "number of classes for imdb labels")
+flags.DEFINE_integer("num_semeval_class", 19, 
+                                     "number of classes for semeval labels")
 flags.DEFINE_integer("pos_num", 123, "number of position feature")
 flags.DEFINE_integer("pos_dim", 5, "position embedding size")
 flags.DEFINE_integer("num_filters", 100, "cnn number of output unit")
+flags.DEFINE_integer('hidden_size', 30,
+                     'Number of hidden units in imdb classification layer.')
 
 flags.DEFINE_float("l2_coef", 0.01, "l2 loss coefficient")
 flags.DEFINE_float("lrn_rate", 1e-3, "learning rate")
@@ -74,12 +79,11 @@ class MTLModel(BaseModel):
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
   def build_semeval_graph(self):
-    lexical, rid, sentence, pos1, pos2 = self.semeval_data
+    lexical, labels, sentence, pos1, pos2 = self.semeval_data
 
     # embedding lookup
     lexical = tf.nn.embedding_lookup(self.word_embed, lexical)
     lexical = tf.reshape(lexical, [-1, 6*FLAGS.word_dim])
-    labels = tf.one_hot(rid, FLAGS.num_relations)
 
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
@@ -98,27 +102,52 @@ class MTLModel(BaseModel):
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 19 classes
-    logits, loss_l2 = linear_layer('linear_semeval', feature, 
-                                  feature_size, FLAGS.num_relations, 
+    logits, loss_l2 = linear_layer('linear_semeval', 
+                                  feature, 
+                                  feature_size, 
+                                  FLAGS.num_semeval_class, 
                                   is_regularize=True)
 
-    prediction = tf.nn.softmax(logits)
-    self.semeval_prediction = tf.argmax(prediction, axis=1)
-
-    accuracy = tf.equal(self.semeval_prediction, tf.argmax(labels, axis=1))
-    self.semeval_accuracy = tf.reduce_mean(tf.cast(accuracy, tf.float32))
-
-    loss_ce = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits))
-
+    xentropy = tf.nn.softmax_cross_entropy_with_logits(
+                          labels=tf.one_hot(labels, FLAGS.num_semeval_class), 
+                          logits=logits)
+    loss_ce = tf.reduce_mean(xentropy)
     self.semeval_loss = loss_ce + FLAGS.l2_coef*loss_l2
 
+    self.semeval_pred = tf.argmax(logits, axis=1)
+    acc = tf.cast(tf.equal(self.semeval_pred, labels), tf.float32)
+    self.semeval_accuracy = tf.reduce_mean(acc)
+
   def build_imdb_graph(self):
-    label, sentence = self.imdb_train
+    labels, sentence = self.imdb_train
+    sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
 
+    if self.is_train:
+      sentence = tf.nn.dropout(sentence, FLAGS.keep_prob)
+    
+    conv = conv_layer('conv_imdb', sentence, FLAGS.imdb_max_len)
+    conv_size = conv.shape.as_list()[1]
+    
+    if self.is_train:
+      conv = tf.nn.dropout(conv, FLAGS.keep_prob)
 
+    # Map the features to 2 classes
+    logits, loss_l2 = linear_layer('linear_imdb_1', conv, 
+                                  conv_size, FLAGS.hidden_size, 
+                                  is_regularize=True)
+    logits, _ = linear_layer('linear_imdb_2', logits, 
+                                  logits.shape.as_list()[1], 1, 
+                                  is_regularize=False)
+    
+    xentropy= tf.nn.sigmoid_cross_entropy_with_logits(
+                                  logits=tf.squeeze(logits), 
+                                  labels=tf.cast(labels, tf.float32))
+    loss_ce = tf.reduce_mean(xentropy)
+    self.imdb_loss = loss_ce + FLAGS.l2_coef*loss_l2
 
-
+    self.imdb_pred = tf.cast(tf.greater(tf.squeeze(logits), 0.5), tf.int64)
+    acc = tf.cast(tf.equal(self.semeval_pred, labels), tf.float32)
+    self.imdb_accuracy = tf.reduce_mean(acc)
 
 
 
