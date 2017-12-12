@@ -18,6 +18,8 @@ flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
 
 FLAGS = flags.FLAGS
 
+FILTER_SIZES = [3,4,5]
+
 def linear_layer(name, x, in_size, out_size, is_regularize=False):
   with tf.variable_scope(name):
     loss_l2 = tf.constant(0, dtype=tf.float32)
@@ -30,34 +32,57 @@ def linear_layer(name, x, in_size, out_size, is_regularize=False):
       loss_l2 += tf.nn.l2_loss(w) + tf.nn.l2_loss(b)
     return o, loss_l2
 
-def conv_layer(name, input, max_len):
-  with tf.variable_scope(name):
-    input = tf.expand_dims(input, axis=-1)
-    input_dim = input.shape.as_list()[2]
+class ConvLayer(tf.layers.Layer):
 
-    # convolutional layer
+  def __init__(self, layer_name, filter_sizes, **kwargs):
+    self.layer_name = layer_name
+    self.filter_sizes = filter_sizes
+    self.conv = {} # trainable variables for conv
+    super(ConvLayer, self).__init__(**kwargs)
+  
+  def build(self, input_shape):
+    with tf.variable_scope(self.layer_name):
+      w_init = tf.truncated_normal_initializer(stddev=0.1)
+      b_init = tf.constant_initializer(0.1)
+
+      for fsize in self.filter_sizes:
+        w_shape = [fsize, FLAGS.word_dim, 1, FLAGS.num_filters]
+        b_shape = [FLAGS.num_filters]
+        w_name = 'conv-W%d' % fsize
+        b_name = 'conv-b%d' % fsize
+        self.conv[w_name] = self.add_variable(
+                                           w_name, w_shape, initializer=w_init)
+        self.conv[b_name] = self.add_variable(
+                                           b_name, b_shape, initializer=b_init)
+    
+      super(ConvLayer, self).build(input_shape)
+  
+  def set_max_len(max_len):
+    self.max_len = max_len
+
+  def call(self, x):
+    x = tf.expand_dims(x, axis=-1)
     pool_outputs = []
-    for filter_size in [3,4,5]:
-      with tf.variable_scope('conv-%s' % filter_size):
-        conv_weight = tf.get_variable('W1', 
-                        [filter_size, input_dim, 1, FLAGS.num_filters],
-                        initializer=tf.truncated_normal_initializer(stddev=0.1))
-        conv_bias = tf.get_variable('b1', [FLAGS.num_filters], 
-                        initializer=tf.constant_initializer(0.1))
-        conv = tf.nn.conv2d(input,
-                        conv_weight,
-                        strides=[1, 1, input_dim, 1],
+
+    for fsize in self.filter_sizes:
+      w_name = 'conv-W%d' % fsize
+      b_name = 'conv-b%d' % fsize
+      
+      conv = tf.nn.conv2d(x,
+                        self.conv[w_name],
+                        strides=[1, 1, FLAGS.word_dim, 1],
                         padding='SAME')
-        conv = tf.nn.relu(conv + conv_bias) # batch_size,max_len,1,num_filters
-        pool = tf.nn.max_pool(conv, 
-                        ksize= [1, max_len, 1, 1], 
-                        strides=[1, max_len, 1, 1], 
-                        padding='SAME') # batch_size,1,1,num_filters
-        pool_outputs.append(pool)
-    pools = tf.reshape(tf.concat(pool_outputs, 3), [-1, 3*FLAGS.num_filters])
+      conv = tf.nn.relu(conv + self.conv[b_name]) # batch,max_len,1,filters
+      pool = tf.nn.max_pool(conv, 
+                        ksize= [1, self.max_len, 1, 1], 
+                        strides=[1, self.max_len, 1, 1], 
+                        padding='SAME') # batch,1,1,filters
+      pool_outputs.append(pool)
+    
+    n = len(self.filter_sizes)
+    pools = tf.reshape(tf.concat(pool_outputs, 3), [-1, n*FLAGS.num_filters])
 
     return pools
-
 
 class MTLModel(BaseModel):
   '''Multi Task Learning'''
@@ -78,6 +103,10 @@ class MTLModel(BaseModel):
     self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
+    self.shared_layer = ConvLayer('conv_shared', FILTER_SIZES)
+    self.build_semeval_graph()
+    self.build_semeval_graph()
+
   def build_semeval_graph(self):
     lexical, labels, sentence, pos1, pos2 = self.semeval_data
 
@@ -94,14 +123,19 @@ class MTLModel(BaseModel):
     if self.is_train:
       sent_pos = tf.nn.dropout(sent_pos, FLAGS.keep_prob)
     
-    conv = conv_layer('conv_semeval', sent_pos, FLAGS.semeval_max_len)
-    feature = tf.concat([lexical, conv], axis=1)
-    feature_size = feature.shape.as_list()[1]
-    
+    conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
+    conv_layer.set_max_len(FLAGS.semeval_max_len)
+    conv_out = conv_layer(sent_pos)
+
+    self.shared_layer.set_max_len(FLAGS.semeval_max_len)
+    shared_out = self.shared_layer(sent_pos)
+
+    feature = tf.concat([lexical, conv_out, shared_out], axis=1)
     if self.is_train:
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 19 classes
+    feature_size = feature.shape.as_list()[1]
     logits, loss_l2 = linear_layer('linear_semeval', 
                                   feature, 
                                   feature_size, 
@@ -125,15 +159,21 @@ class MTLModel(BaseModel):
     if self.is_train:
       sentence = tf.nn.dropout(sentence, FLAGS.keep_prob)
     
-    conv = conv_layer('conv_imdb', sentence, FLAGS.imdb_max_len)
-    conv_size = conv.shape.as_list()[1]
-    
+    conv_layer = ConvLayer('conv_imdb', FILTER_SIZES)
+    conv_layer.set_max_len(FLAGS.imdb_max_len)
+    conv_out = conv_layer(sentence)
+
+    self.shared_layer.set_max_len(FLAGS.imdb_max_len)
+    shared_out = self.shared_layer(sentence)
+
+    feature = tf.concat([conv_out, shared_out], axis=1)
     if self.is_train:
-      conv = tf.nn.dropout(conv, FLAGS.keep_prob)
+      feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 2 classes
-    logits, loss_l2 = linear_layer('linear_imdb_1', conv, 
-                                  conv_size, FLAGS.hidden_size, 
+    feature_size = feature.shape.as_list()[1]
+    logits, loss_l2 = linear_layer('linear_imdb_1', feature, 
+                                  feature_size, FLAGS.hidden_size, 
                                   is_regularize=True)
     logits, _ = linear_layer('linear_imdb_2', logits, 
                                   logits.shape.as_list()[1], 1, 
@@ -149,8 +189,8 @@ class MTLModel(BaseModel):
     acc = tf.cast(tf.equal(self.semeval_pred, labels), tf.float32)
     self.imdb_accuracy = tf.reduce_mean(acc)
 
-
-
+  def set_shared_max_len(self, max_len):
+    self.shared_layer.set_max_len(max_len)
 
 def optimize():
   global_step = tf.Variable(0, trainable=False, name='step', dtype=tf.int32)
