@@ -197,7 +197,7 @@ def _shuf_and_write(filename):
 
   random.shuffle(records)
   
-  writer = tf.python_io.TFRecordWriter(out_filename)
+  writer = tf.python_io.TFRecordWriter(filename)
   for record in records:
     writer.write(record)
   writer.close()

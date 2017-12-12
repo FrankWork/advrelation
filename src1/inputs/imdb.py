@@ -121,7 +121,6 @@ def write_as_tfrecord(train_data, test_data, vocab2id):
                          _build_sequence_example)
 
   util._shuf_and_write(FLAGS.imdb_train_record)
-  util._shuf_and_write(FLAGS.imdb_test_record)
 
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors
