@@ -95,6 +95,8 @@ def train(sess, m_train, m_valid):
     imdb_loss /= 250
     imdb_acc /= 250
 
+    imdb_valid_acc = sess.run(m_valid.imdb_accuracy)
+
     # train SemEval
     sem_loss, sem_acc = 0., 0.
     for batch in range(80):
@@ -116,7 +118,7 @@ def train(sess, m_train, m_valid):
       best_step = sess.run(m_train.global_step)
       m_train.save(sess, best_step)
     
-    print("Epoch %d, imdb_loss_acc %.2f %.2f sem_loss_acc %.2f %.2f, valid_acc %.4f time %.2f" % 
+    print("Epoch %d imdb %.2f %.2f %.4f sem %.2f %.2f %.4f time %.2f" % 
              (epoch, imdb_loss, imdb_acc, sem_loss, sem_acc, sem_valid_acc, duration))
     sys.stdout.flush()
   
@@ -148,7 +150,7 @@ def main(_):
                                           FLAGS.num_epochs, FLAGS.batch_size)
     imdb_train, imdb_test = imdb.read_tfrecord(
                                           FLAGS.num_epochs, FLAGS.batch_size)
-
+      
     m_train, m_valid = mtl_model.build_train_valid_model(
                                           word_embed, 
                                           semeval_train, semeval_test, 

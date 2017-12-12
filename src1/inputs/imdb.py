@@ -32,7 +32,7 @@ def _load_raw_data_from_dir(dir, neg_or_pos):
 
   data = []
   dir = os.path.join(dir, neg_or_pos)
-  label = True if neg_or_pos == 'pos' else False
+  label = 1 if neg_or_pos == 'pos' else 0
 
   for filename in os.listdir(dir):
     filename = os.path.join(dir, filename)
@@ -119,6 +119,9 @@ def write_as_tfrecord(train_data, test_data, vocab2id):
                          FLAGS.imdb_test_record, 
                          FLAGS.imdb_max_len, 
                          _build_sequence_example)
+
+  util._shuf_and_write(FLAGS.imdb_train_record)
+  util._shuf_and_write(FLAGS.imdb_test_record)
 
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors

@@ -183,19 +183,20 @@ class MTLModel(BaseModel):
     # Map the features to 2 classes
     feature_size = feature.shape.as_list()[1]
     logits, loss_l2 = linear_layer('linear_imdb_1', feature, 
-                                  feature_size, FLAGS.hidden_size, 
+                                  feature_size, FLAGS.num_imdb_class, 
                                   is_regularize=True)
-    logits, _ = linear_layer('linear_imdb_2', logits, 
-                                  logits.shape.as_list()[1], 1, 
-                                  is_regularize=False)
     
-    xentropy= tf.nn.sigmoid_cross_entropy_with_logits(
-                                  logits=tf.squeeze(logits), 
-                                  labels=tf.cast(labels, tf.float32))
+    # xentropy= tf.nn.sigmoid_cross_entropy_with_logits(
+    #                               logits=tf.squeeze(logits), 
+    #                               labels=tf.cast(labels, tf.float32))
+    xentropy = tf.nn.softmax_cross_entropy_with_logits(
+                          labels=tf.one_hot(labels, FLAGS.num_imdb_class), 
+                          logits=logits)
     loss_ce = tf.reduce_mean(xentropy)
     self.imdb_loss = loss_ce + FLAGS.l2_coef*loss_l2
 
-    self.imdb_pred = tf.cast(tf.greater(tf.squeeze(logits), 0.5), tf.int64)
+    # self.imdb_pred = tf.cast(tf.greater(tf.squeeze(logits), 0.5), tf.int64)
+    self.imdb_pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(self.imdb_pred, labels), tf.float32)
     self.imdb_accuracy = tf.reduce_mean(acc)
 

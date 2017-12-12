@@ -170,6 +170,8 @@ def write_as_tfrecord(train_data, test_data, vocab2id):
                          FLAGS.semeval_max_len, 
                          _build_sequence_example)
 
+  util._shuf_and_write(FLAGS.semeval_train_record)
+  util._shuf_and_write(FLAGS.semeval_test_record)
 
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors

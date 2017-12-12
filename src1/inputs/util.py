@@ -1,5 +1,6 @@
 import os
 import re
+import random
 import numpy as np
 import tensorflow as tf
 from collections import defaultdict
@@ -178,7 +179,7 @@ def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
     dataset = dataset.map(parse_func)
     dataset = dataset.repeat(epoch)
     if shuffle:
-      dataset = dataset.shuffle(buffer_size=100)
+      dataset = dataset.shuffle(buffer_size=1000)
     
     dataset = dataset.batch(batch_size)
     
@@ -186,5 +187,17 @@ def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
     batch = iterator.get_next()
     return batch
 
+def _shuf_and_write(filename):
+  reader = tf.python_io.tf_record_iterator(filename)
+  records = []
+  for record in reader:
+    # record is of <class 'bytes'>
+    records.append(record)
+  reader.close()
 
-
+  random.shuffle(records)
+  
+  writer = tf.python_io.TFRecordWriter(out_filename)
+  for record in records:
+    writer.write(record)
+  writer.close()
