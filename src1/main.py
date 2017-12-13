@@ -22,38 +22,47 @@ flags.DEFINE_integer("num_epochs", 200, "number of epochs")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 
 flags.DEFINE_boolean('test', False, 'set True to test')
-flags.DEFINE_boolean('trace', False, 'set True to test')
+flags.DEFINE_boolean('trace', False, 'set True to trace runtime bottleneck')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
-flags.DEFINE_boolean('trim_embed', False, 'set True to trim pretrained embedding')
 
 FLAGS = tf.app.flags.FLAGS
 
 def build_data():
   '''load raw data, build vocab, build TFRecord data, trim embeddings
   '''
+  def _build_vocab(imdb_data, semeval_data):
+    print('build vocab')
+    imdb_vocab   = imdb.build_vocab(imdb_data)
+    print('imdb vocab: %d' % len(imdb_vocab))
+    semeval_vocab = semeval.build_vocab(semeval_data)
+    print('semeval vocab: %d' % len(semeval_vocab))
+    inter_vocab = imdb_vocab.intersection(semeval_vocab)
+    print('imdb semeval intersection vocab: %d' % len(inter_vocab)) # 16717
+    union_vocab = imdb_vocab.union(semeval_vocab)
+    print('imdb semeval union vocab: %d' % len(union_vocab)) # 65189
+
+    util.write_vocab(union_vocab)
+
+  def _build_data(imdb_train, imdb_test, semeval_train, semeval_test):
+    vocab2id = util.load_vocab2id()
+
+    print('convert semeval data to TFRecord')
+    semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
+    print('convert imdb data to TFRecord')
+    imdb.write_as_tfrecord(imdb_train, imdb_test, vocab2id)
+
+  def _trim_embed():
+    print('trimming pretrained embeddings')
+    util.trim_embeddings()
+
   print('load raw data')
   imdb_train, imdb_test       = imdb.load_raw_data()
   semeval_train, semeval_test = semeval.load_raw_data()
-
-  print('build vocab')
-  imdb_vocab   = imdb.build_vocab(imdb_train + imdb_test)
-  emeval_vocab = semeval.build_vocab(semeval_train + semeval_test)
-  vocab = imdb_vocab.union(emeval_vocab)
-  util.write_vocab(vocab)
-  del imdb_vocab
-  del emeval_vocab
-  del vocab
-
-  vocab2id = util.load_vocab2id()
-  print('convert semeval data to TFRecord')
-  semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
-  print('convert imdb data to TFRecord')
-  imdb.write_as_tfrecord(imdb_train, imdb_test, vocab2id)
-
-def trim_embed():
-  print('trimming pretrained embeddings')
-  util.trim_embeddings()
-
+  
+  _build_vocab(imdb_train + imdb_test, semeval_train + semeval_test)
+  _build_data(imdb_train, imdb_test, semeval_train, semeval_test)
+  # _trim_embed()
+  
 def trace_runtime(sess, m_train):
   '''
   trace runtime bottleneck using timeline api
@@ -141,9 +150,6 @@ def main(_):
   if FLAGS.build_data:
     build_data()
     exit()
-  elif FLAGS.trim_embed:
-    trim_embed()
-    exit()
 
   word_embed = util.load_embedding()
   with tf.Graph().as_default():
@@ -157,12 +163,9 @@ def main(_):
                                           semeval_train, semeval_test, 
                                           imdb_train, imdb_test)
     m_train.set_saver('mtl-%d-%d' % (FLAGS.num_epochs, FLAGS.word_dim))
-    
     m_train.build_train_op()
-
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
-
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     

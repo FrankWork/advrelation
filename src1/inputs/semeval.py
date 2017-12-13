@@ -12,6 +12,9 @@ flags.DEFINE_string("semeval_train_file", "data/SemEval/train.cln",
 flags.DEFINE_string("semeval_test_file", "data/SemEval/test.cln", 
                              "original test file")
 
+flags.DEFINE_string("semeval_vocab_file", "data/generated/vocab.semeval.txt", 
+                              "vocab of train and test data")
+
 flags.DEFINE_string("semeval_train_record", 
                               "data/generated/train.semeval.tfrecord", 
                              "training file of TFRecord format")
@@ -66,6 +69,7 @@ def build_vocab(raw_data):
     for w in example.sentence:
         vocab.add(w)
 
+  util.write_vocab(vocab, FLAGS.semeval_vocab_file)
   return vocab
 
 def _lexical_feature(raw_example):

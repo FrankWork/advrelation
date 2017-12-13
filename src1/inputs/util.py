@@ -35,18 +35,22 @@ FLAGS = tf.app.flags.FLAGS # load FLAGS.word_dim
 PAD_WORD = "<pad>"
 
 # nltk.tokenize.regexp.WordPunctTokenizer
-pattern = r'\d+|\w+|[^\w\s]+' 
+pattern = r'\d+|\w+|[^\w\s]' 
 regexp = re.compile(pattern)
 
 def wordpunct_tokenizer(line):
-  line = re.sub(r"[^A-Za-z0-9]", " ", line)
-  line = re.sub(r"\s{2,}", " ", line)
+  line = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", line)
 
   return regexp.findall(line)
 
-def write_vocab(vocab):
-  '''collect words in sentence'''
-  with open(FLAGS.vocab_file, 'w') as f:
+def write_vocab(vocab, vocab_file=FLAGS.vocab_file):
+  '''write vocab to the file
+  
+  Args:
+    vocab: a set of tokens
+    vocab_file: filename of the file
+  '''
+  with open(vocab_file, 'w') as f:
     f.write('%s\n' % PAD_WORD) # make sure the pad id is 0
     for w in sorted(list(vocab)):
       f.write('%s\n' % w)
@@ -141,7 +145,21 @@ def _pad_or_truncate(raw_example, max_len, pad_id):
   # else nothing happens
   pad_n = max_len - len(raw_example['sentence'])
   raw_example['sentence'].extend(pad_n*[pad_id])
-    
+
+def _write_text_for_debug(text_writer, raw_example, vocab2id):
+  '''write raw_example['sentence'] to the disk, for debug 
+
+  Args:
+    text_writer: text_writer = open(file, 'w')
+    raw_example: an instance of Raw_Example._asdict()
+    vocab2id: dict<token, id> {token0: id0, ...}
+  '''
+  tokens = []
+  for token in raw_example['sentence']:
+    if token in vocab2id:
+      tokens.append(token)
+  text_writer.write(' '.join(tokens) + '\n')
+      
 def write_as_tfrecord(raw_data, vocab2id, filename, max_len, build_func):
   '''convert the raw data to TFRecord format and write to disk
 
@@ -153,17 +171,20 @@ def write_as_tfrecord(raw_data, vocab2id, filename, max_len, build_func):
     build_func: function to convert Raw_Example to tf.train.SequenceExample
   '''
   writer = tf.python_io.TFRecordWriter(filename)
+  text_writer = open(filename+'.debug.txt', 'w')
   pad_id = vocab2id[PAD_WORD]
   
   for raw_example in raw_data:
     raw_example = raw_example._asdict()
 
-    _map_tokens_to_ids(raw_example, vocab2id)
-    _pad_or_truncate  (raw_example, max_len, pad_id)
+    _write_text_for_debug(text_writer, raw_example, vocab2id)
+    # _map_tokens_to_ids(raw_example, vocab2id)
+    # _pad_or_truncate  (raw_example, max_len, pad_id)
     
-    example = build_func(raw_example)
-    writer.write(example.SerializeToString())
+    # example = build_func(raw_example)
+    # writer.write(example.SerializeToString())
   writer.close()
+  text_writer.close()
   del raw_data
 
 

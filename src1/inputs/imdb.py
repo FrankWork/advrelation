@@ -12,6 +12,9 @@ flags.DEFINE_string("imdb_train_dir", "data/aclImdb/train",
 flags.DEFINE_string("imdb_test_dir", "data/aclImdb/test", 
                              "imdb test directory")
 
+flags.DEFINE_string("imdb_vocab_file", "data/generated/vocab.imdb.txt", 
+                              "vocab of train and test data")
+
 flags.DEFINE_string("imdb_train_record", "data/generated/train.imdb.tfrecord", 
                              "training file of TFRecord format")
 flags.DEFINE_string("imdb_test_record", "data/generated/test.imdb.tfrecord", 
@@ -82,6 +85,7 @@ def build_vocab(raw_data):
 
   vocab = [token for token, _ in ordered_vocab_freqs]
   vocab = set(vocab)
+  util.write_vocab(vocab, FLAGS.imdb_vocab_file)
   return vocab
 
 def _build_sequence_example(raw_example):
