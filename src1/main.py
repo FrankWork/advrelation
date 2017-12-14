@@ -42,7 +42,7 @@ def build_data():
     print('imdb semeval union vocab: %d' % len(union_vocab)) # 65189
 
     util.write_vocab(union_vocab)
-
+    
   def _build_data(imdb_train, imdb_test, semeval_train, semeval_test):
     vocab2id = util.load_vocab2id()
 
@@ -61,7 +61,7 @@ def build_data():
   
   _build_vocab(imdb_train + imdb_test, semeval_train + semeval_test)
   _build_data(imdb_train, imdb_test, semeval_train, semeval_test)
-  # _trim_embed()
+  _trim_embed()
   
 def trace_runtime(sess, m_train):
   '''

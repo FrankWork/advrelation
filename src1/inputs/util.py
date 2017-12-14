@@ -34,13 +34,17 @@ FLAGS = tf.app.flags.FLAGS # load FLAGS.word_dim
 
 PAD_WORD = "<pad>"
 
-# nltk.tokenize.regexp.WordPunctTokenizer
-pattern = r'\d+|\w+|[^\w\s]' 
-regexp = re.compile(pattern)
+# similar to nltk.tokenize.regexp.WordPunctTokenizer
+# decimal, inter, 'm, 's, 'll, 've, 're, 'd, n't, words, punctuations
+regexp = re.compile(r"\d*\.\d+|\d+|'m|'s|'ll|'ve|'re|'d|n't|\w+|[^\w\s]+")
 
 def wordpunct_tokenizer(line):
-  line = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", line)
-
+  '''tokenizer sentence by decimal, inter, 
+  'm, 's, 'll, 've, 're, 'd, n't, words, punctuations
+  '''
+  # replace html tags, <br /> in imdb text
+  line = re.sub(r'<[^>]*>', ' ', line)
+  line = re.sub(r"n't", " n't", line)
   return regexp.findall(line)
 
 def write_vocab(vocab, vocab_file=FLAGS.vocab_file):
@@ -178,15 +182,14 @@ def write_as_tfrecord(raw_data, vocab2id, filename, max_len, build_func):
     raw_example = raw_example._asdict()
 
     _write_text_for_debug(text_writer, raw_example, vocab2id)
-    # _map_tokens_to_ids(raw_example, vocab2id)
-    # _pad_or_truncate  (raw_example, max_len, pad_id)
+    _map_tokens_to_ids(raw_example, vocab2id)
+    _pad_or_truncate  (raw_example, max_len, pad_id)
     
-    # example = build_func(raw_example)
-    # writer.write(example.SerializeToString())
+    example = build_func(raw_example)
+    writer.write(example.SerializeToString())
   writer.close()
   text_writer.close()
   del raw_data
-
 
 def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
   '''read TFRecord file to get batch tensors for tensorflow models

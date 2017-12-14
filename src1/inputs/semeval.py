@@ -1,3 +1,4 @@
+import re
 import os
 import tensorflow as tf
 from collections import defaultdict
@@ -7,9 +8,9 @@ from inputs import util
 
 flags = tf.app.flags
 
-flags.DEFINE_string("semeval_train_file", "data/SemEval/train.cln", 
+flags.DEFINE_string("semeval_train_file", "data/SemEval/train.txt", 
                              "original training file")
-flags.DEFINE_string("semeval_test_file", "data/SemEval/test.cln", 
+flags.DEFINE_string("semeval_test_file", "data/SemEval/test.txt", 
                              "original test file")
 
 flags.DEFINE_string("semeval_vocab_file", "data/generated/vocab.semeval.txt", 
@@ -35,31 +36,80 @@ FLAGS = flags.FLAGS
 Raw_Example = namedtuple('Raw_Example', 'label entity1 entity2 sentence')
 PositionPair = namedtuple('PosPair', 'first last')
 
+_entity_regex = re.compile(r"<e[12]>(.*?)</e[12]>")
+_etag_mask = re.compile(r"</?e[12]>")
 
-def _load_raw_data(filename):
+def _load_relations():
+  id2relation = []
+  relation2id = dict()
+
+  with open(FLAGS.relations_file) as f:
+    for id, line in enumerate(f):
+      rel = segment = line.strip().split()[1]
+      id2relation.append(rel)
+      relation2id[rel] = id
+  
+  return relation2id, id2relation
+
+def _find_entity_pos(entity, tokens):
+  ''' find start and ending position of the entity in tokens
+  '''
+  n = len(entity)
+  for i in range(len(tokens)):
+    if tokens[i:i+n]==entity:
+      first, last = i, i+n-1
+      return PositionPair(first, last)
+
+def _load_raw_data(filename, relation2id):
   '''load raw data from text file, 
+  file contents:
+    1	"The ... an arrayed <e1>configuration</e1> of antenna <e2>elements</e2>."
+    Component-Whole(e2,e1)
+    Comment: Not a collection: there is structure here, organisation.
+
+    2	"The <e1>child</e1> ... the <e2>cradle</e2> by means of a cord."
+    Other
+    Comment:
+
+    EOF
 
   return: a list of Raw_Example
   '''
   data = []
-  with open(filename) as f:
-    for line in f:
-      words = line.strip().split(' ')
-      
-      sent = words[5:]
+  lines = open(filename).readlines()
+  n = len(lines)
+  assert n % 4 == 0
+  for i in range(n//4):
+    sentence = lines[4*i].split('\t')[1].strip('"|\n').lower()
+    
+    entities = _entity_regex.findall(sentence)
+    assert len(entities) == 2
 
-      label = int(words[0])
+    sentence = _etag_mask.sub(' ', sentence)
+    tokens = util.wordpunct_tokenizer(sentence)
 
-      entity1 = PositionPair(int(words[1]), int(words[2]))
-      entity2 = PositionPair(int(words[3]), int(words[4]))
+    entities = [util.wordpunct_tokenizer(entity) for entity in entities]
+    entity1 = _find_entity_pos(entities[0], tokens)
+    entity2 = _find_entity_pos(entities[1], tokens)
+    try:
+      assert entity1 is not None and entity2 is not None
+    except AssertionError:
+      print(sentence)
+      print(entities, ' '.join(tokens))
+      exit()
 
-      example = Raw_Example(label, entity1, entity2, sent)
-      data.append(example)
+    rel_text = lines[4*i+1].strip()
+    label = relation2id[rel_text]
+
+    example = Raw_Example(label, entity1, entity2, tokens)
+    data.append(example)
+
   return data
 
 def load_raw_data():
-  train_data = _load_raw_data(FLAGS.semeval_train_file)
-  test_data = _load_raw_data(FLAGS.semeval_test_file)
+  relation2id, _ = _load_relations()
+  train_data = _load_raw_data(FLAGS.semeval_train_file, relation2id)
+  test_data = _load_raw_data(FLAGS.semeval_test_file, relation2id)
   return train_data, test_data
 
 def build_vocab(raw_data):
@@ -217,14 +267,10 @@ def read_tfrecord(epoch, batch_size):
   return train_data, test_data
 
 def write_results(predictions):
-  relations = []
-  with open(FLAGS.relations_file) as f:
-    for line in f:
-      segment = line.strip().split()
-      relations.append(segment[1])
+  _, id2relations = _load_relations()
   
   start_no = 8001
   with open(FLAGS.results_file, 'w') as f:
     for idx, id in enumerate(predictions):
-      rel = relations[id]
+      rel = id2relations[id]
       f.write('%d\t%s\n' % (start_no+idx, rel))
