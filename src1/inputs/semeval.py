@@ -91,12 +91,7 @@ def _load_raw_data(filename, relation2id):
     entities = [util.wordpunct_tokenizer(entity) for entity in entities]
     entity1 = _find_entity_pos(entities[0], tokens)
     entity2 = _find_entity_pos(entities[1], tokens)
-    try:
-      assert entity1 is not None and entity2 is not None
-    except AssertionError:
-      print(sentence)
-      print(entities, ' '.join(tokens))
-      exit()
+    assert entity1 is not None and entity2 is not None
 
     rel_text = lines[4*i+1].strip()
     label = relation2id[rel_text]

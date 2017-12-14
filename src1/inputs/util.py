@@ -69,13 +69,13 @@ def _load_vocab(vocab_file):
 
   return vocab
 
-def load_embedding(embed_file=None):
+def load_embedding(embed_file=None, word_dim=None):
   '''Load embeddings from file
   '''
   if embed_file is None:
-    if FLAGS.word_dim == 50:
+    if word_dim == 50:
       embed_file   = FLAGS.trimmed_embed50_file
-    elif FLAGS.word_dim == 300:
+    elif word_dim == 300:
       embed_file   = FLAGS.trimmed_embed300_file
   
   embed = np.load(embed_file)
@@ -92,18 +92,19 @@ def load_vocab2id(vocab_file=None):
 
   return vocab2id
 
-def trim_embeddings():
+def trim_embeddings(word_dim):
   '''trim unnecessary words from original pre-trained word embedding'''
-  if FLAGS.word_dim == 50:
+  print('word_dim %d'%word_dim)
+  if word_dim == 50:
     pretrain_embed_file = FLAGS.senna_embed50_file
     pretrain_words_file = FLAGS.senna_words_file
     trimed_embed_file   = FLAGS.trimmed_embed50_file
-  elif FLAGS.word_dim == 300:
+  elif word_dim == 300:
     pretrain_embed_file = FLAGS.google_embed300_file
     pretrain_words_file = FLAGS.google_words_file
     trimed_embed_file   = FLAGS.trimmed_embed300_file
 
-  pretrain_embed    = load_embedding(pretrain_embed_file)
+  pretrain_embed    = load_embedding(pretrain_embed_file, word_dim)
   pretrain_words2id = load_vocab2id(pretrain_words_file)
 
   word_embed=[]

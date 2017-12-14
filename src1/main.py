@@ -17,7 +17,7 @@ flags = tf.app.flags
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
 
 
-flags.DEFINE_integer("word_dim", 50, "word embedding size")
+flags.DEFINE_integer("word_dim", 300, "word embedding size")
 flags.DEFINE_integer("num_epochs", 200, "number of epochs")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 
@@ -53,7 +53,7 @@ def build_data():
 
   def _trim_embed():
     print('trimming pretrained embeddings')
-    util.trim_embeddings()
+    util.trim_embeddings(FLAGS.word_dim)
 
   print('load raw data')
   imdb_train, imdb_test       = imdb.load_raw_data()
@@ -104,6 +104,7 @@ def train(sess, m_train, m_valid):
     imdb_loss /= 250
     imdb_acc /= 250
 
+    # imdb_valid_acc = 0
     imdb_valid_acc = sess.run(m_valid.imdb_accuracy)
 
     # train SemEval
@@ -151,7 +152,7 @@ def main(_):
     build_data()
     exit()
 
-  word_embed = util.load_embedding()
+  word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
   with tf.Graph().as_default():
     semeval_train, semeval_test = semeval.read_tfrecord(
                                           FLAGS.num_epochs, FLAGS.batch_size)

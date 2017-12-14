@@ -62,3 +62,13 @@ duration: 0.17 hours
 
 <<< The official score is (9+1)-way evaluation with directionality 
 taken into account: macro-averaged F1 = 81.95% >>>
+
+
+Epoch 197 imdb 0.00 0.00 0.0000 sem 0.09 0.99 0.7674 time 2.92
+Epoch 198 imdb 0.00 0.00 0.0000 sem 0.08 0.99 0.7733 time 2.83
+Epoch 199 imdb 0.00 0.00 0.0000 sem 0.09 0.99 0.7707 time 2.75
+Done training, best_step: 8400, best_acc: 0.7784
+duration: 0.16 hours
+
+<<< The official score is (9+1)-way evaluation with directionality
+taken into account: macro-averaged F1 = 81.46% >>>
