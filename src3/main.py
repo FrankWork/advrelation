@@ -5,8 +5,9 @@ import tensorflow as tf
 import numpy as np
 
 from inputs import util
-from inputs import imdb
-from inputs import semeval
+from inputs import fudan
+# from inputs import imdb
+# from inputs import semeval
 from models import mtl_model
 
 # tf.set_random_seed(0)
@@ -30,8 +31,9 @@ FLAGS = tf.app.flags.FLAGS
 def build_data():
   '''load raw data, build vocab, build TFRecord data, trim embeddings
   '''
-  def _build_vocab(imdb_data, semeval_data):
+  def _build_vocab(all_data):
     print('build vocab')
+    
     imdb_vocab   = imdb.build_vocab(imdb_data)
     print('imdb vocab: %d' % len(imdb_vocab))
     semeval_vocab = semeval.build_vocab(semeval_data)
@@ -56,34 +58,15 @@ def build_data():
     util.trim_embeddings(FLAGS.word_dim)
 
   print('load raw data')
-  imdb_train, imdb_test       = imdb.load_raw_data()
-  semeval_train, semeval_test = semeval.load_raw_data()
+  all_data = []
+  for task_data in fudan.load_raw_data():
+    all_data.append(task_data)
   
-  _build_vocab(imdb_train + imdb_test, semeval_train + semeval_test)
+  _build_vocab(all_data)
+
   _build_data(imdb_train, imdb_test, semeval_train, semeval_test)
   _trim_embed()
   
-def trace_runtime(sess, m_train):
-  '''
-  trace runtime bottleneck using timeline api
-
-  navigate to the URL 'chrome://tracing' in a Chrome web browser, 
-  click the 'Load' button and locate the timeline file.
-  '''
-  run_metadata=tf.RunMetadata()
-  options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-  from tensorflow.python.client import timeline
-  trace_file = open('timeline.ctf.json', 'w')
-
-  fetches = [m_train.train_op, m_train.loss, m_train.accuracy]
-  _, loss, acc = sess.run(fetches, 
-                            options=options, 
-                            run_metadata=run_metadata)
-                            
-  trace = timeline.Timeline(step_stats=run_metadata.step_stats)
-  trace_file.write(trace.generate_chrome_trace_format())
-  trace_file.close()
-
 def train(sess, m_train, m_valid):
   imdb_train_fetch =    [m_train.imdb_train, 
                          m_train.imdb_loss, m_train.imdb_accuracy]
