@@ -19,7 +19,7 @@ flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
 
 flags.DEFINE_integer("word_dim", 300, "word embedding size")
 flags.DEFINE_integer("num_epochs", 200, "number of epochs")
-flags.DEFINE_integer("batch_size", 100, "batch size")
+flags.DEFINE_integer("batch_size", 50, "batch size")
 
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('trace', False, 'set True to trace runtime bottleneck')
@@ -84,7 +84,7 @@ def trace_runtime(sess, m_train):
   trace_file.write(trace.generate_chrome_trace_format())
   trace_file.close()
 
-def train(sess, m_train, m_valid):
+def train_v0(sess, m_train, m_valid):
   imdb_train_fetch =    [m_train.imdb_train, 
                          m_train.imdb_loss, m_train.imdb_accuracy]
   semeval_train_fetch = [m_train.semeval_train, 
@@ -123,6 +123,116 @@ def train(sess, m_train, m_valid):
 
     # valid accuracy
     sem_valid_acc = sess.run(m_valid.semeval_accuracy)
+    if best_acc < sem_valid_acc:
+      best_acc = sem_valid_acc
+      best_step = sess.run(m_train.global_step)
+      m_train.save(sess, best_step)
+    
+    print("Epoch %d imdb %.2f %.2f %.4f sem %.2f %.2f %.4f time %.2f" % 
+             (epoch, imdb_loss, imdb_acc, imdb_valid_acc, 
+                      sem_loss, sem_acc, sem_valid_acc, duration))
+    sys.stdout.flush()
+  
+  duration = time.time() - orig_begin_time
+  duration /= 3600
+  print('Done training, best_step: %d, best_acc: %.4f' % (best_step, best_acc))
+  print('duration: %.2f hours' % duration)
+  sys.stdout.flush()
+
+def train_v1(sess, m_train, m_valid):
+  imdb_train_fetch =    [m_train.imdb_train, 
+                         m_train.imdb_loss, m_train.imdb_accuracy]
+  semeval_train_fetch = [m_train.semeval_train, 
+                         m_train.semeval_loss, m_train.semeval_accuracy]
+
+  best_acc, best_step= 0., 0
+  start_time = time.time()
+  orig_begin_time = start_time
+
+  for epoch in range(FLAGS.num_epochs):
+    # train imdb and SemEval
+    imdb_loss, imdb_acc = 0., 0.
+    sem_loss, sem_acc = 0., 0.
+    for batch in range(80):
+      _, loss, acc = sess.run(imdb_train_fetch)
+      imdb_loss += loss
+      imdb_acc += acc
+
+      _, loss, acc = sess.run(semeval_train_fetch)
+      sem_loss += loss
+      sem_acc += acc
+
+    imdb_loss /= 80
+    imdb_acc /= 80
+
+    sem_loss /= 80
+    sem_acc /= 80
+
+    # epoch duration
+    now = time.time()
+    duration = now - start_time
+    start_time = now
+
+    # valid accuracy
+    # imdb_valid_acc = 0
+    imdb_valid_acc = sess.run(m_valid.imdb_accuracy)
+    sem_valid_acc = sess.run(m_valid.semeval_accuracy)
+
+    if best_acc < sem_valid_acc:
+      best_acc = sem_valid_acc
+      best_step = sess.run(m_train.global_step)
+      m_train.save(sess, best_step)
+    
+    print("Epoch %d imdb %.2f %.2f %.4f sem %.2f %.2f %.4f time %.2f" % 
+             (epoch, imdb_loss, imdb_acc, imdb_valid_acc, 
+                      sem_loss, sem_acc, sem_valid_acc, duration))
+    sys.stdout.flush()
+  
+  duration = time.time() - orig_begin_time
+  duration /= 3600
+  print('Done training, best_step: %d, best_acc: %.4f' % (best_step, best_acc))
+  print('duration: %.2f hours' % duration)
+  sys.stdout.flush()
+
+def train(sess, m_train, m_valid):
+  imdb_train_fetch =    [m_train.imdb_train, 
+                         m_train.imdb_loss, m_train.imdb_accuracy]
+  semeval_train_fetch = [m_train.semeval_train, 
+                         m_train.semeval_loss, m_train.semeval_accuracy]
+
+  best_acc, best_step= 0., 0
+  start_time = time.time()
+  orig_begin_time = start_time
+
+  for epoch in range(FLAGS.num_epochs):
+    # train imdb and SemEval
+    imdb_loss, imdb_acc = 0., 0.
+    sem_loss, sem_acc = 0., 0.
+    for batch in range(160):
+      _, loss, acc = sess.run(imdb_train_fetch)
+      imdb_loss += loss
+      imdb_acc += acc
+
+      _, loss, acc = sess.run(semeval_train_fetch)
+      sem_loss += loss
+      sem_acc += acc
+
+    imdb_loss /= 160
+    imdb_acc /= 160
+
+    sem_loss /= 160
+    sem_acc /= 160
+
+    # epoch duration
+    now = time.time()
+    duration = now - start_time
+    start_time = now
+
+    # valid accuracy
+    # imdb_valid_acc = 0
+    imdb_valid_acc = sess.run(m_valid.imdb_accuracy)
+    sem_valid_acc = sess.run(m_valid.semeval_accuracy)
+
     if best_acc < sem_valid_acc:
       best_acc = sem_valid_acc
       best_step = sess.run(m_train.global_step)

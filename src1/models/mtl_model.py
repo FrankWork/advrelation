@@ -153,7 +153,9 @@ class MTLModel(BaseModel):
     self.is_train = is_train
 
     # embedding initialization
-    w_trainable = True if FLAGS.word_dim==50 else False
+    self.word_dim = word_embed.shape[1]
+    w_trainable = True if self.word_dim==50 else False
+    
     self.word_embed = tf.get_variable('word_embed', 
                                       initializer=word_embed,
                                       dtype=tf.float32,
@@ -193,7 +195,7 @@ class MTLModel(BaseModel):
 
     # embedding lookup
     lexical = tf.nn.embedding_lookup(self.word_embed, lexical)
-    lexical = tf.reshape(lexical, [-1, 6*FLAGS.word_dim])
+    lexical = tf.reshape(lexical, [-1, 6*self.word_dim])
 
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
@@ -231,7 +233,8 @@ class MTLModel(BaseModel):
     task_label = tf.one_hot(tf.ones_like(labels), 2)
     loss_adv, loss_adv_l2 = self.adversarial_loss(shared_out, task_label)
 
-    self.semeval_loss = loss_ce + 0.01*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2)
+    self.semeval_loss = loss_ce  + FLAGS.l2_coef*loss_l2
+    # self.semeval_loss = loss_ce + 0.01*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2)
 
     self.semeval_pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(self.semeval_pred, labels), tf.float32)
@@ -272,7 +275,8 @@ class MTLModel(BaseModel):
     task_label = tf.one_hot(tf.zeros_like(labels), 2)
     loss_adv, loss_adv_l2 = self.adversarial_loss(shared_out, task_label)
 
-    self.imdb_loss = loss_ce + 0.01*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2)
+    self.imdb_loss = loss_ce  + FLAGS.l2_coef*loss_l2
+    # self.imdb_loss = loss_ce + 0.01*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2)
 
     # self.imdb_pred = tf.cast(tf.greater(tf.squeeze(logits), 0.5), tf.int64)
     self.imdb_pred = tf.argmax(logits, axis=1)
