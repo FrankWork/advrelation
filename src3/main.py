@@ -8,15 +8,12 @@ from inputs import util
 from inputs import fudan
 # from inputs import imdb
 # from inputs import semeval
-from models import mtl_model
-
+# from models import mtl_model
+from models import cnn_model
 # tf.set_random_seed(0)
 # np.random.seed(0)
 
 flags = tf.app.flags
-
-flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
-
 
 flags.DEFINE_integer("word_dim", 300, "word embedding size")
 flags.DEFINE_integer("num_epochs", 200, "number of epochs")
@@ -33,25 +30,18 @@ def build_data():
   '''
   def _build_vocab(all_data):
     print('build vocab')
+    for task_data in all_data:
+      train_data, test_data = task_data
+      data.extend(train_data + test_data)
+    vocab = fudan.build_vocab(data)
+    util.write_vocab(vocab)
     
-    imdb_vocab   = imdb.build_vocab(imdb_data)
-    print('imdb vocab: %d' % len(imdb_vocab))
-    semeval_vocab = semeval.build_vocab(semeval_data)
-    print('semeval vocab: %d' % len(semeval_vocab))
-    inter_vocab = imdb_vocab.intersection(semeval_vocab)
-    print('imdb semeval intersection vocab: %d' % len(inter_vocab)) # 16717
-    union_vocab = imdb_vocab.union(semeval_vocab)
-    print('imdb semeval union vocab: %d' % len(union_vocab)) # 65189
-
-    util.write_vocab(union_vocab)
-    
-  def _build_data(imdb_train, imdb_test, semeval_train, semeval_test):
+  def _build_data(all_data):
     vocab2id = util.load_vocab2id()
 
-    print('convert semeval data to TFRecord')
-    semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
-    print('convert imdb data to TFRecord')
-    imdb.write_as_tfrecord(imdb_train, imdb_test, vocab2id)
+    for task_id, task_data in enumerate(all_data):
+      train_data, test_data = task_data
+      fudan.write_as_tfrecord(train_data, test_data, task_id, vocab2id)
 
   def _trim_embed():
     print('trimming pretrained embeddings')
@@ -64,7 +54,7 @@ def build_data():
   
   _build_vocab(all_data)
 
-  _build_data(imdb_train, imdb_test, semeval_train, semeval_test)
+  _build_data(all_data)
   _trim_embed()
   
 def train(sess, m_train, m_valid):
@@ -137,17 +127,14 @@ def main(_):
 
   word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
   with tf.Graph().as_default():
-    semeval_train, semeval_test = semeval.read_tfrecord(
-                                          FLAGS.num_epochs, FLAGS.batch_size)
-    imdb_train, imdb_test = imdb.read_tfrecord(
-                                          FLAGS.num_epochs, FLAGS.batch_size)
+    data_iter = fudan.read_tfrecord(FLAGS.num_epochs, FLAGS.batch_size)
+    for task_id, train_data, test_data in enumerate(data_iter):
+      task_name = fudan.get_task_name(task_id)
+      model_name = '%s-%d-%d' % (task_name, FLAGS.num_epochs, FLAGS.word_dim)
+      m_train, m_valid = cnn_model.build_train_valid_model(
+                                model_name, word_embed, train_data, test_data)
       
-    m_train, m_valid = mtl_model.build_train_valid_model(
-                                          word_embed, 
-                                          semeval_train, semeval_test, 
-                                          imdb_train, imdb_test)
-    m_train.set_saver('mtl-%d-%d' % (FLAGS.num_epochs, FLAGS.word_dim))
-    m_train.build_train_op()
+      
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
     config = tf.ConfigProto()

@@ -14,6 +14,9 @@ MTL_VOCAB_FILE = "data/gen-mtl/vocab.mtl.txt"
 OUT_DIR = "data/gen-mtl"
 MAX_LEN = 100
 
+def get_task_name(task_id):
+  return DATASETS[task_id]
+
 def _load_raw_data_from_file(filename, task_id):
   data = []
   with open(filename) as f:

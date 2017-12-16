@@ -297,13 +297,3 @@ def optimize(loss, global_step):
     train_op = optimizer.minimize(loss, global_step)
   return train_op
 
-def build_train_valid_model(word_embed, 
-                            semeval_train, semeval_test, 
-                            imdb_train, imdb_test):
-  with tf.name_scope("Train"):
-    with tf.variable_scope('MTLModel', reuse=None):
-      m_train = MTLModel(word_embed, semeval_train, imdb_train, is_train=True)
-  with tf.name_scope('Valid'):
-    with tf.variable_scope('MTLModel', reuse=True):
-      m_valid = MTLModel(word_embed, semeval_test, imdb_test, is_train=False)
-  return m_train, m_valid
