@@ -10,17 +10,11 @@ flags.DEFINE_integer("num_semeval_class", 19,
                                      "number of classes for semeval labels")
 flags.DEFINE_integer("pos_num", 123, "number of position feature")
 flags.DEFINE_integer("pos_dim", 5, "position embedding size")
-flags.DEFINE_integer("num_filters", 100, "cnn number of output unit")
+
 flags.DEFINE_integer('hidden_size', 30,
                      'Number of hidden units in imdb classification layer.')
 
-flags.DEFINE_float("l2_coef", 0.01, "l2 loss coefficient")
-flags.DEFINE_float("lrn_rate", 1e-3, "learning rate")
-flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
-
 FLAGS = flags.FLAGS
-
-FILTER_SIZES = [3, 4, 5]
 
 class FlipGradientBuilder(object):
   '''Gradient Reversal Layer from https://github.com/pumpikano/tf-dann'''
@@ -55,93 +49,6 @@ def linear_layer(name, x, in_size, out_size, is_regularize=False):
       loss_l2 += tf.nn.l2_loss(w) + tf.nn.l2_loss(b)
     return o, loss_l2
 
-
-class LinearLayer(tf.layers.Layer):
-  '''inherit tf.layers.Layer to cache trainable variables
-  '''
-  def __init__(self, layer_name, out_size, is_regularize, **kwargs):
-    self.layer_name = layer_name
-    self.out_size = out_size
-    self.is_regularize = is_regularize
-    super(LinearLayer, self).__init__(**kwargs)
-  
-  def build(self, input_shape):
-    in_size = input_shape[1]
-
-    with tf.variable_scope(self.layer_name):
-      w_init = tf.truncated_normal_initializer(stddev=0.1)
-      b_init = tf.constant_initializer(0.1)
-
-      self.w = self.add_variable('W', [in_size, self.out_size], initializer=w_init)
-      self.b = self.add_variable('b', [self.out_size], initializer=b_init)
-
-      super(LinearLayer, self).build(input_shape)
-
-  def call(self, x):
-    loss_l2 = tf.constant(0, dtype=tf.float32)
-    o = tf.nn.xw_plus_b(x, self.w, self.b)
-    if self.is_regularize:
-        loss_l2 += tf.nn.l2_loss(self.w) + tf.nn.l2_loss(self.b)
-    return o, loss_l2
-
-class ConvLayer(tf.layers.Layer):
-  '''inherit tf.layers.Layer to cache trainable variables
-  '''
-  def __init__(self, layer_name, filter_sizes, **kwargs):
-    self.layer_name = layer_name
-    self.filter_sizes = filter_sizes
-    self.conv = {} # trainable variables for conv
-    super(ConvLayer, self).__init__(**kwargs)
-  
-  def build(self, input_shape):
-    input_dim = input_shape[2]
-
-    with tf.variable_scope(self.layer_name):
-      w_init = tf.truncated_normal_initializer(stddev=0.1)
-      b_init = tf.constant_initializer(0.1)
-
-      for fsize in self.filter_sizes:
-        w_shape = [fsize, input_dim, 1, FLAGS.num_filters]
-        b_shape = [FLAGS.num_filters]
-        w_name = 'conv-W%d' % fsize
-        b_name = 'conv-b%d' % fsize
-        self.conv[w_name] = self.add_variable(
-                                           w_name, w_shape, initializer=w_init)
-        self.conv[b_name] = self.add_variable(
-                                           b_name, b_shape, initializer=b_init)
-    
-      super(ConvLayer, self).build(input_shape)
-
-  def call(self, x):
-    x = tf.expand_dims(x, axis=-1)
-    input_dim = x.shape.as_list()[2]
-    conv_outs = []
-    for fsize in self.filter_sizes:
-      w_name = 'conv-W%d' % fsize
-      b_name = 'conv-b%d' % fsize
-      
-      conv = tf.nn.conv2d(x,
-                        self.conv[w_name],
-                        strides=[1, 1, input_dim, 1],
-                        padding='SAME')
-      conv = tf.nn.relu(conv + self.conv[b_name]) # batch,max_len,1,filters
-      conv_outs.append(conv)
-    return conv_outs
-
-def max_pool(conv_outs, max_len):
-  pool_outs = []
-
-  for conv in conv_outs:
-    pool = tf.nn.max_pool(conv, 
-                        ksize= [1, max_len, 1, 1], 
-                        strides=[1, max_len, 1, 1], 
-                        padding='SAME') # batch,1,1,filters
-    pool_outs.append(pool)
-    
-  n = len(conv_outs)
-  pools = tf.reshape(tf.concat(pool_outs, 3), [-1, n*FLAGS.num_filters])
-
-  return pools
 
 class MTLModel(BaseModel):
   '''Multi Task Learning'''
@@ -289,11 +196,5 @@ class MTLModel(BaseModel):
       self.semeval_train = optimize(self.semeval_loss, self.global_step)
       self.imdb_train = optimize(self.imdb_loss, self.global_step)
 
-def optimize(loss, global_step):
-  optimizer = tf.train.AdamOptimizer(FLAGS.lrn_rate)
 
-  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-  with tf.control_dependencies(update_ops):# for batch_norm
-    train_op = optimizer.minimize(loss, global_step)
-  return train_op
 

@@ -16,11 +16,10 @@ from models import cnn_model
 flags = tf.app.flags
 
 flags.DEFINE_integer("word_dim", 300, "word embedding size")
-flags.DEFINE_integer("num_epochs", 200, "number of epochs")
-flags.DEFINE_integer("batch_size", 50, "batch size")
+flags.DEFINE_integer("num_epochs", 100, "number of epochs")
+flags.DEFINE_integer("batch_size", 16, "batch size")
 
 flags.DEFINE_boolean('test', False, 'set True to test')
-flags.DEFINE_boolean('trace', False, 'set True to trace runtime bottleneck')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
 
 FLAGS = tf.app.flags.FLAGS
@@ -45,7 +44,8 @@ def build_data():
 
   def _trim_embed():
     print('trimming pretrained embeddings')
-    util.trim_embeddings(FLAGS.word_dim)
+    util.trim_embeddings(50)
+    util.trim_embeddings(300)
 
   print('load raw data')
   all_data = []
@@ -57,34 +57,25 @@ def build_data():
   _build_data(all_data)
   _trim_embed()
   
-def train(sess, m_train, m_valid):
-  imdb_train_fetch =    [m_train.imdb_train, 
-                         m_train.imdb_loss, m_train.imdb_accuracy]
-  semeval_train_fetch = [m_train.semeval_train, 
-                         m_train.semeval_loss, m_train.semeval_accuracy]
-
+def train(sess, models):
+  n_models = len(models)
+  
   best_acc, best_step= 0., 0
   start_time = time.time()
   orig_begin_time = start_time
 
   for epoch in range(FLAGS.num_epochs):
-    # train imdb and SemEval
-    imdb_loss, imdb_acc = 0., 0.
-    sem_loss, sem_acc = 0., 0.
-    for batch in range(160):
-      _, loss, acc = sess.run(imdb_train_fetch)
-      imdb_loss += loss
-      imdb_acc += acc
+    all_loss, all_acc = 0., 0.
+    for batch in range(82):
+      for i in range(n_models):
+        m_train, m_valid = models[i]
+        train_fetch = [m_train.train, m_train.loss, m_train.acc]
+        _, loss, acc = sess.run(train_fetch)
+        all_loss += loss
+        all_acc += acc
 
-      _, loss, acc = sess.run(semeval_train_fetch)
-      sem_loss += loss
-      sem_acc += acc
-
-    imdb_loss /= 160
-    imdb_acc /= 160
-
-    sem_loss /= 160
-    sem_acc /= 160
+    all_loss /= (82*n_models)
+    all_acc /= (82*n_models)
 
     # epoch duration
     now = time.time()
@@ -92,34 +83,39 @@ def train(sess, m_train, m_valid):
     start_time = now
 
     # valid accuracy
-    # imdb_valid_acc = 0
-    imdb_valid_acc = sess.run(m_valid.imdb_accuracy)
-    sem_valid_acc = sess.run(m_valid.semeval_accuracy)
+    valid_acc
+    for i in range(n_models):
+      m_train, m_valid = models[i]
+      acc = sess.run(m_valid.acc)
+      valid_acc += acc
+    valid_acc /= n_models
 
-    if best_acc < sem_valid_acc:
-      best_acc = sem_valid_acc
-      best_step = sess.run(m_train.global_step)
-      m_train.save(sess, best_step)
-    
-    print("Epoch %d imdb %.2f %.2f %.4f sem %.2f %.2f %.4f time %.2f" % 
-             (epoch, imdb_loss, imdb_acc, imdb_valid_acc, 
-                      sem_loss, sem_acc, sem_valid_acc, duration))
+    if best_acc < valid_acc:
+      best_acc = valid_acc
+      best_step = epoch
+      for i in range(n_models):
+        m_train, m_valid = models[i]
+        m_train.save(sess, epoch)
+      
+    print("Epoch %d loss %.2f acc %.2f %.4f time %.2f" % 
+             (epoch, loss, acc, valid_acc, duration))
     sys.stdout.flush()
   
   duration = time.time() - orig_begin_time
   duration /= 3600
-  print('Done training, best_step: %d, best_acc: %.4f' % (best_step, best_acc))
+  print('Done training, best_epoch: %d, best_acc: %.4f' % (best_step, best_acc))
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
 
-def test(sess, m_valid):
-  m_valid.restore(sess)
-  fetches = [m_valid.semeval_accuracy, m_valid.semeval_pred]
-  accuracy, predictions = sess.run(fetches)
-  print('accuracy: %.4f' % accuracy)
+def test(sess, models):
+  n_models = len(models)
+  for i in range(n_models):
+    task_name = fudan.get_task_name(i)
+    m_train, m_valid = models[i]
+    m_valid.restore(sess)
+    acc = sess.run(m_valid.acc)
+    print('%s acc: %.4f' % (task_name, acc))
   
-  semeval.write_results(predictions)
-
 def main(_):
   if FLAGS.build_data:
     build_data()
@@ -127,13 +123,14 @@ def main(_):
 
   word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
   with tf.Graph().as_default():
+    models = []
     data_iter = fudan.read_tfrecord(FLAGS.num_epochs, FLAGS.batch_size)
     for task_id, train_data, test_data in enumerate(data_iter):
       task_name = fudan.get_task_name(task_id)
-      model_name = '%s-%d-%d' % (task_name, FLAGS.num_epochs, FLAGS.word_dim)
+      model_name = 'task-%s-%d-%d' % (task_name, FLAGS.num_epochs, FLAGS.word_dim)
       m_train, m_valid = cnn_model.build_train_valid_model(
                                 model_name, word_embed, train_data, test_data)
-      
+      models.append((m_train, m_valid))
       
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
@@ -144,12 +141,10 @@ def main(_):
       sess.run(init_op)
       print('='*80)
 
-      if FLAGS.trace:
-        trace_runtime(sess, m_train)
-      elif FLAGS.test:
-        test(sess, m_valid)
+      if FLAGS.test:
+        test(sess, models)
       else:
-        train(sess, m_train, m_valid)
+        train(sess, models)
 
 if __name__ == '__main__':
   tf.app.run()

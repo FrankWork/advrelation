@@ -1,8 +1,9 @@
 import os
 import re
+import chardet
 from collections import namedtuple
 
-import util
+from inputs import util
 
 DATA_DIR = "data/mtl-dataset"
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo', 'dvd', 'electronics', 
@@ -19,13 +20,22 @@ def get_task_name(task_id):
 
 def _load_raw_data_from_file(filename, task_id):
   data = []
-  with open(filename) as f:
+  f = open(filename, mode='rb')
+  result = chardet.detect(f.read())
+  encoding = result['encoding']
+  f.close()
+  print(encoding)
+  with open(filename, encoding=encoding) as f:
+    # try:
     for line in f:
       segments = line.strip().split('\t')
       label = int(segments[0])
       tokens = segments[1].split(' ')
       example = Raw_Example(label, task_id, tokens)
-    data.append(example)
+      data.append(example)
+    # except UnicodeDecodeError:
+    #   print(filename)
+    #   exit()
   return data
 
 def _load_raw_data(dataset_name, task_id):
