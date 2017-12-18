@@ -29,13 +29,17 @@ def build_data():
   '''
   def _build_vocab(all_data):
     print('build vocab')
+    data = []
     for task_data in all_data:
       train_data, test_data = task_data
       data.extend(train_data + test_data)
     vocab = fudan.build_vocab(data)
     util.write_vocab(vocab)
+
+    util.stat_length(data)
     
   def _build_data(all_data):
+    print('build data')
     vocab2id = util.load_vocab2id()
 
     for task_id, task_data in enumerate(all_data):
@@ -83,7 +87,7 @@ def train(sess, models):
     start_time = now
 
     # valid accuracy
-    valid_acc
+    valid_acc = 0.
     for i in range(n_models):
       m_train, m_valid = models[i]
       acc = sess.run(m_valid.acc)
@@ -125,7 +129,7 @@ def main(_):
   with tf.Graph().as_default():
     models = []
     data_iter = fudan.read_tfrecord(FLAGS.num_epochs, FLAGS.batch_size)
-    for task_id, train_data, test_data in enumerate(data_iter):
+    for task_id, (train_data, test_data) in enumerate(data_iter):
       task_name = fudan.get_task_name(task_id)
       model_name = 'task-%s-%d-%d' % (task_name, FLAGS.num_epochs, FLAGS.word_dim)
       m_train, m_valid = cnn_model.build_train_valid_model(

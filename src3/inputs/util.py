@@ -8,7 +8,7 @@ from collections import namedtuple
 
 flags = tf.app.flags
 
-flags.DEFINE_string("vocab_file", "data/generated/vocab.txt", 
+flags.DEFINE_string("vocab_file", "data/gen-mtl/vocab.mtl.txt", 
                               "vocab of train and test data")
 
 flags.DEFINE_string("google_embed300_file", 
@@ -18,7 +18,7 @@ flags.DEFINE_string("google_words_file",
                              "data/pretrain/google_words.lst", 
                              "google words list")
 flags.DEFINE_string("trimmed_embed300_file", 
-                             "data/generated/embed300.trim.npy", 
+                             "data/gen-mtl/embed300.trim.npy", 
                              "trimmed google embedding")
 
 flags.DEFINE_string("senna_embed50_file", 
@@ -28,7 +28,7 @@ flags.DEFINE_string("senna_words_file",
                              "data/pretrain/senna_words.lst", 
                              "senna words list")
 flags.DEFINE_string("trimmed_embed50_file", 
-                             "data/generated/embed50.trim.npy", 
+                             "data/gen-mtl/embed50.trim.npy", 
                              "trimmed senna embedding")
 FLAGS = tf.app.flags.FLAGS # load FLAGS.word_dim
 
@@ -114,14 +114,26 @@ def trim_embeddings(word_dim):
       id = pretrain_words2id[w]
       word_embed.append(pretrain_embed[id])
     else:
-      vec = np.random.normal(0,0.1,[FLAGS.word_dim])
+      vec = np.random.normal(0,0.1,[word_dim])
       word_embed.append(vec)
   pad_id = -1
-  word_embed[pad_id] = np.zeros([FLAGS.word_dim])
+  word_embed[pad_id] = np.zeros([word_dim])
 
   word_embed = np.asarray(word_embed)
   np.save(trimed_embed_file, word_embed.astype(np.float32))
-  
+
+def stat_length(raw_data):
+  '''get max_len and avg_len from data
+  '''
+  length = [len(example.sentence) for example in raw_data]
+  length = sorted(length)
+  length = np.asarray(length)
+
+  max_len = np.max(length)
+  avg_len = np.mean(length)
+  med_len = np.median(length)
+  print('max_len: %d, avg_len: %d, med_len: %d' %(max_len, avg_len, med_len))
+
 def _map_tokens_to_ids(raw_example, vocab2id):
   '''inplace convert sentence from a list of tokens to a list of ids
   Args:
@@ -176,20 +188,20 @@ def write_as_tfrecord(raw_data, vocab2id, filename, max_len, build_func):
     build_func: function to convert Raw_Example to tf.train.SequenceExample
   '''
   writer = tf.python_io.TFRecordWriter(filename)
-  text_writer = open(filename+'.debug.txt', 'w')
+  # text_writer = open(filename+'.debug.txt', 'w')
   pad_id = vocab2id[PAD_WORD]
   
   for raw_example in raw_data:
     raw_example = raw_example._asdict()
-
-    _write_text_for_debug(text_writer, raw_example, vocab2id)
+    
+    # _write_text_for_debug(text_writer, raw_example, vocab2id)
     _map_tokens_to_ids(raw_example, vocab2id)
     _pad_or_truncate  (raw_example, max_len, pad_id)
     
     example = build_func(raw_example)
     writer.write(example.SerializeToString())
   writer.close()
-  text_writer.close()
+  # text_writer.close()
   del raw_data
 
 def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):

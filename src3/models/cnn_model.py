@@ -21,7 +21,7 @@ class CNNModel(BaseModel):
     self.build_classify_graph()
 
   def build_classify_graph(self):
-    labels, sentence = self.data
+    _, labels, sentence = self.data
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
 
     if self.is_train:
@@ -29,7 +29,7 @@ class CNNModel(BaseModel):
     
     conv_layer = ConvLayer('conv_imdb', FILTER_SIZES)
     conv_out = conv_layer(sentence)
-    conv_out = max_pool(conv_out, FLAGS.imdb_max_len)
+    conv_out = max_pool(conv_out, 500)
 
     feature = conv_out
     if self.is_train:

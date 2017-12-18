@@ -1,38 +1,35 @@
 import os
 import re
-import chardet
 from collections import namedtuple
+import tensorflow as tf
 
 from inputs import util
 
 DATA_DIR = "data/mtl-dataset"
-DATASETS = ['apparel', 'baby', 'books', 'camera_photo', 'dvd', 'electronics', 
-      'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines', 'MR',
+DATASETS = ['apparel', 'baby', 'books', 'camera_photo',  'electronics', 
+      'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines', 
       'music', 'software', 'sports_outdoors', 'toys_games', 'video']
+# 'dvd','MR',
 SUFFIX = ['.task.train', '.task.test', '.task.unlabel']
 Raw_Example = namedtuple('Raw_Example', 'label task sentence')
 MTL_VOCAB_FILE = "data/gen-mtl/vocab.mtl.txt"
 OUT_DIR = "data/gen-mtl"
-MAX_LEN = 100
+MAX_LEN = 500
 
 def get_task_name(task_id):
   return DATASETS[task_id]
 
 def _load_raw_data_from_file(filename, task_id):
   data = []
-  f = open(filename, mode='rb')
-  result = chardet.detect(f.read())
-  encoding = result['encoding']
-  f.close()
-  print(encoding)
-  with open(filename, encoding=encoding) as f:
+  with open(filename) as f:
     # try:
     for line in f:
       segments = line.strip().split('\t')
-      label = int(segments[0])
-      tokens = segments[1].split(' ')
-      example = Raw_Example(label, task_id, tokens)
-      data.append(example)
+      if len(segments) == 2:
+        label = int(segments[0])
+        tokens = segments[1].split(' ')
+        example = Raw_Example(label, task_id, tokens)
+        data.append(example)
     # except UnicodeDecodeError:
     #   print(filename)
     #   exit()
@@ -55,7 +52,6 @@ def build_vocab(raw_data):
     for w in example.sentence:
         vocab.add(w)
 
-  util.write_vocab(vocab, MTL_VOCAB_FILE)
   return vocab
 
 def _build_sequence_example(raw_example):
