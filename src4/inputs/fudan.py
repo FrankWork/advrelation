@@ -132,8 +132,8 @@ def read_tfrecord(epoch, batch_size):
                                   shuffle=True)
 
   test_data = util.read_tfrecord(test_record_file, 
-                                  epoch, 
-                                  400*14  , 
+                                  1, 
+                                  batch_size, 
                                   _parse_tfexample, 
                                   shuffle=False)
   return train_data, test_data

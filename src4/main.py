@@ -21,7 +21,7 @@ flags.DEFINE_integer("batch_size", 16, "batch size")
 
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
-
+flags.DEFINE_boolean('adv', False, 'set True to use adv training')
 FLAGS = tf.app.flags.FLAGS
 
 def build_data():
@@ -53,22 +53,26 @@ def build_data():
   _build_data(train_data, test_data)
   _trim_embed()
   
-def train(sess, m_train, m_valid):
-  train_fetch = [m_train.train, m_train.loss, m_train.acc]
+def train(sess, m_train, m_valid, test_iter):
+  train_fetch = [m_train.train, m_train.loss, m_train.acc, m_train.adv_acc]
   
   best_acc, best_step= 0., 0
   start_time = time.time()
   orig_begin_time = start_time
 
   for epoch in range(FLAGS.num_epochs):
-    all_loss, all_acc = 0., 0.
+    sess.run(test_iter.initializer)
+
+    all_loss, all_acc, all_adv_acc = 0., 0., 0.
     for batch in range(1386):
-      _, loss, acc = sess.run(train_fetch)
+      _, loss, acc, adv_acc = sess.run(train_fetch)
       all_loss += loss
       all_acc += acc
+      all_adv_acc += adv_acc
 
     all_loss /= 1386
     all_acc /= 1386
+    all_adv_acc /= 1386
 
     # epoch duration
     now = time.time()
@@ -76,15 +80,21 @@ def train(sess, m_train, m_valid):
     start_time = now
 
     # valid accuracy
-    valid_acc = sess.run(m_valid.acc)
-
+    valid_acc = 0.
+    while True:
+      try:
+        acc = sess.run(m_valid.acc)
+        valid_acc += acc
+      except tf.errors.OutOfRangeError:
+        break
+    valid_acc /= 350
+    
     if best_acc < valid_acc:
       best_acc = valid_acc
       best_step = epoch
       m_train.save(sess, epoch)
-      
-    print("Epoch %d loss %.2f acc %.2f %.4f time %.2f" % 
-             (epoch, loss, acc, valid_acc, duration))
+    print("Epoch %d loss %.2f adv_acc %.4f acc %.2f %.4f time %.2f" % 
+             (epoch, all_loss, all_adv_acc, all_acc, valid_acc, duration))
     sys.stdout.flush()
   
   duration = time.time() - orig_begin_time
@@ -92,15 +102,6 @@ def train(sess, m_train, m_valid):
   print('Done training, best_epoch: %d, best_acc: %.4f' % (best_step, best_acc))
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
-
-def test(sess, models):
-  n_models = len(models)
-  for i in range(n_models):
-    task_name = fudan.get_task_name(i)
-    m_train, m_valid = models[i]
-    m_valid.restore(sess)
-    acc = sess.run(m_valid.acc)
-    print('%s err: %.4f' % (task_name, 1-acc))
   
 def main(_):
   if FLAGS.build_data:
@@ -109,11 +110,13 @@ def main(_):
 
   word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
   with tf.Graph().as_default():
-    train_data, test_data = fudan.read_tfrecord(FLAGS.num_epochs, 
+    train_iter, test_iter = fudan.read_tfrecord(FLAGS.num_epochs, 
                                                 FLAGS.batch_size)
-    
+    train_data = train_iter.get_next()
+    test_data = test_iter.get_next()
+
     m_train, m_valid = mtl_model.build_train_valid_model(
-                                'fudan-mtl', word_embed, train_data, test_data)
+                    'fudan-mtl', word_embed, train_data, test_data, FLAGS.adv)
       
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
@@ -127,7 +130,7 @@ def main(_):
       if FLAGS.test:
         test(sess, models)
       else:
-        train(sess, m_train, m_valid)
+        train(sess, m_train, m_valid, test_iter)
 
 if __name__ == '__main__':
   tf.app.run()

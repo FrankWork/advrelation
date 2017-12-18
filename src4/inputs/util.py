@@ -220,10 +220,12 @@ def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
     
     dataset = dataset.batch(batch_size)
     
-    iterator = dataset.make_one_shot_iterator()
-    batch = iterator.get_next()
-    return batch
-
+    if shuffle:
+      iterator = dataset.make_one_shot_iterator()
+    else:
+      iterator = dataset.make_initializable_iterator()
+    return iterator
+  
 def _shuf_and_write(filename):
   reader = tf.python_io.tf_record_iterator(filename)
   records = []

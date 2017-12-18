@@ -1,3 +1,5 @@
+$ mtl only
+
 Epoch 0 loss 0.83 acc 0.50 0.5889 time 23.05
 Epoch 1 loss 0.61 acc 0.62 0.6377 time 24.86
 Epoch 2 loss 0.73 acc 0.56 0.7968 time 24.56
@@ -21,3 +23,29 @@ Epoch 19 loss 0.09 acc 1.00 0.8616 time 23.95
 Epoch 20 loss 0.27 acc 0.94 0.8639 time 23.80
 
 acc 0.8643, err 13.57
+
+$ mtl + adv
+
+Epoch 0 loss 1.93 adv_acc 0.0708 acc 0.54 0.5861 time 30.73
+Epoch 1 loss 0.90 adv_acc 0.0786 acc 0.60 0.7030 time 32.83
+Epoch 2 loss 0.87 adv_acc 0.0738 acc 0.68 0.8002 time 32.40
+Epoch 3 loss 0.91 adv_acc 0.0718 acc 0.75 0.8286 time 32.06
+Epoch 4 loss 1.04 adv_acc 0.0754 acc 0.79 0.8309 time 31.95
+Epoch 5 loss 1.20 adv_acc 0.0754 acc 0.81 0.8455 time 32.63
+Epoch 6 loss 1.38 adv_acc 0.0727 acc 0.82 0.8525 time 32.22
+Epoch 7 loss 1.57 adv_acc 0.0727 acc 0.84 0.8529 time 31.89
+Epoch 8 loss 1.78 adv_acc 0.0733 acc 0.85 0.8575 time 31.78
+Epoch 9 loss 1.99 adv_acc 0.0710 acc 0.86 0.8411 time 31.79
+Epoch 10 loss 2.24 adv_acc 0.0723 acc 0.87 0.8566 time 31.57
+Epoch 11 loss 2.46 adv_acc 0.0723 acc 0.88 0.8648 time 31.56
+Epoch 12 loss 2.73 adv_acc 0.0705 acc 0.89 0.8616 time 32.07
+Epoch 13 loss 2.93 adv_acc 0.0692 acc 0.89 0.8659 time 31.94
+Epoch 14 loss 3.10 adv_acc 0.0687 acc 0.90 0.8657 time 32.44
+Epoch 15 loss 3.48 adv_acc 0.0750 acc 0.90 0.8630 time 31.87
+Epoch 16 loss 3.57 adv_acc 0.0708 acc 0.91 0.8623 time 31.99
+Epoch 17 loss 3.93 adv_acc 0.0731 acc 0.91 0.8557 time 32.25
+Epoch 18 loss 4.21 adv_acc 0.0685 acc 0.92 0.8566 time 31.91
+Epoch 19 loss 4.42 adv_acc 0.0724 acc 0.92 0.8618 time 32.13
+Epoch 20 loss 4.79 adv_acc 0.0723 acc 0.92 0.8514 time 31.78
+
+acc 0.8648, err 13.52

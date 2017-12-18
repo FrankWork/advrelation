@@ -4,7 +4,7 @@ import tensorflow as tf
 flags = tf.app.flags
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
 flags.DEFINE_integer("num_filters", 100, "cnn number of output unit")
-flags.DEFINE_float("lrn_rate", 0.01, "learning rate")
+flags.DEFINE_float("lrn_rate", 0.001, "learning rate")
 flags.DEFINE_float("l2_coef", 0.01, "l2 loss coefficient")
 flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
 

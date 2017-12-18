@@ -52,6 +52,7 @@ Epoch 49 loss 0.17 acc 0.79 0.7880 time 21.78
 Epoch 50 loss 0.18 acc 0.81 0.7916 time 21.75
 Epoch 51 loss 0.17 acc 0.80 0.7827 time 22.30
 
+acc 0.7916 err 20.84
 
 300
 GraphDef cannot be larger than 2GB.
