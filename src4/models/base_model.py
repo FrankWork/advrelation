@@ -1,10 +1,12 @@
 import os
 import tensorflow as tf
+from tensorflow.python.framework import ops
+
 
 flags = tf.app.flags
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
 flags.DEFINE_integer("num_filters", 100, "cnn number of output unit")
-flags.DEFINE_float("lrn_rate", 0.01, "learning rate")
+flags.DEFINE_float("lrn_rate", 0.001, "learning rate")
 flags.DEFINE_float("l2_coef", 0.01, "l2 loss coefficient")
 flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
 
@@ -128,3 +130,23 @@ def optimize(loss, global_step):
   with tf.control_dependencies(update_ops):# for batch_norm
     train_op = optimizer.minimize(loss, global_step)
   return train_op
+
+class FlipGradientBuilder(object):
+  '''Gradient Reversal Layer from https://github.com/pumpikano/tf-dann'''
+  def __init__(self):
+    self.num_calls = 0
+
+  def __call__(self, x, l=1.0):
+    grad_name = "FlipGradient%d" % self.num_calls
+    @ops.RegisterGradient(grad_name)
+    def _flip_gradients(op, grad):
+      return [ tf.negative(grad) * l]
+    
+    g = tf.get_default_graph()
+    with g.gradient_override_map({"Identity": grad_name}):
+      y = tf.identity(x)
+        
+    self.num_calls += 1
+    return y
+    
+flip_gradient = FlipGradientBuilder()
