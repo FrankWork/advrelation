@@ -47,13 +47,29 @@ class MTLModel(BaseModel):
     loss_adv = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=logits))
 
-    # Orthogonality Constraints
-    # loss_diff += tf.reduce_sum(
-    #                   tf.square(
-    #                     tf.matmul(cnn_out, shared, transpose_a=True)
-    #                   ))
-
     return loss_adv, loss_l2
+  
+  def diff_loss(self, shared_feat, task_feat):
+    '''Orthogonality Constraints from https://github.com/tensorflow/models,
+    in directory research/domain_adaptation
+    '''
+    task_feat -= tf.reduce_mean(task_feat, 0)
+    shared_feat -= tf.reduce_mean(shared_feat, 0)
+
+    task_feat = tf.nn.l2_normalize(task_feat, 1)
+    shared_feat = tf.nn.l2_normalize(shared_feat, 1)
+
+    correlation_matrix = tf.matmul(
+        task_feat, shared_feat, transpose_a=True)
+
+    cost = tf.reduce_mean(tf.square(correlation_matrix)) * 0.01
+    cost = tf.where(cost > 0, cost, 0, name='value')
+
+    assert_op = tf.Assert(tf.is_finite(cost), [cost])
+    with tf.control_dependencies([assert_op]):
+      loss_diff = tf.identity(cost)
+
+    return loss_diff
 
   def build_task_graph(self, data):
     task_label, labels, sentence = data
@@ -87,9 +103,10 @@ class MTLModel(BaseModel):
     loss_ce = tf.reduce_mean(xentropy)
 
     loss_adv, loss_adv_l2 = self.adversarial_loss(shared_out, task_label)
+    loss_diff = self.diff_loss(shared_out, conv_out)
 
     if self.adv:
-      loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2)
+      loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2) + loss_diff
     else:
       loss = loss_ce  + FLAGS.l2_coef*loss_l2
     
