@@ -8,8 +8,7 @@ from inputs import util
 from inputs import fudan
 # from inputs import imdb
 # from inputs import semeval
-# from models import mtl_model
-from models import cnn_model
+from models import mtl_model
 # tf.set_random_seed(0)
 # np.random.seed(0)
 
@@ -19,6 +18,7 @@ flags.DEFINE_integer("word_dim", 300, "word embedding size")
 flags.DEFINE_integer("num_epochs", 100, "number of epochs")
 flags.DEFINE_integer("batch_size", 16, "batch size")
 
+flags.DEFINE_boolean('adv', False, 'set True to adv training')
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
 
@@ -61,25 +61,25 @@ def build_data():
   _build_data(all_data)
   _trim_embed()
   
-def train(sess, models):
-  n_models = len(models)
-  
+def train(sess, m_train, m_valid):
   best_acc, best_step= 0., 0
   start_time = time.time()
   orig_begin_time = start_time
 
+  n_task = len(m_train.tensors)
   for epoch in range(FLAGS.num_epochs):
     all_loss, all_acc = 0., 0.
     for batch in range(82):
-      for i in range(n_models):
-        m_train, m_valid = models[i]
-        train_fetch = [m_train.train, m_train.loss, m_train.acc]
+      for i in range(n_task):
+        acc, loss = m_train.tensors[i]
+        train_op = m_train.train_ops[i]
+        train_fetch = [train_op, loss, acc]
         _, loss, acc = sess.run(train_fetch)
         all_loss += loss
         all_acc += acc
 
-    all_loss /= (82*n_models)
-    all_acc /= (82*n_models)
+    all_loss /= (82*n_task)
+    all_acc /= (82*n_task)
 
     # epoch duration
     now = time.time()
@@ -88,21 +88,19 @@ def train(sess, models):
 
     # valid accuracy
     valid_acc = 0.
-    for i in range(n_models):
-      m_train, m_valid = models[i]
-      acc = sess.run(m_valid.acc)
+    for i in range(n_task):
+      acc, _ = m_valid.tensors[i]
+      acc = sess.run(acc)
       valid_acc += acc
-    valid_acc /= n_models
+    valid_acc /= n_task
 
     if best_acc < valid_acc:
       best_acc = valid_acc
       best_step = epoch
-      for i in range(n_models):
-        m_train, m_valid = models[i]
-        m_train.save(sess, epoch)
+      m_train.save(sess, epoch)
       
     print("Epoch %d loss %.2f acc %.2f %.4f time %.2f" % 
-             (epoch, loss, acc, valid_acc, duration))
+             (epoch, all_loss, all_acc, valid_acc, duration))
     sys.stdout.flush()
   
   duration = time.time() - orig_begin_time
@@ -127,14 +125,16 @@ def main(_):
 
   word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
   with tf.Graph().as_default():
-    models = []
+    all_train = []
+    all_test = []
     data_iter = fudan.read_tfrecord(FLAGS.num_epochs, FLAGS.batch_size)
     for task_id, (train_data, test_data) in enumerate(data_iter):
       task_name = fudan.get_task_name(task_id)
-      model_name = 'task-%s-%d-%d' % (task_name, FLAGS.num_epochs, FLAGS.word_dim)
-      m_train, m_valid = cnn_model.build_train_valid_model(
-                                model_name, word_embed, train_data, test_data)
-      models.append((m_train, m_valid))
+      all_train.append((task_name, train_data))
+      all_test.append((task_name, test_data))
+      
+    m_train, m_valid = mtl_model.build_train_valid_model(
+                       'fudan-mtl', word_embed, all_train, all_test, FLAGS.adv)
       
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
@@ -148,7 +148,7 @@ def main(_):
       if FLAGS.test:
         test(sess, models)
       else:
-        train(sess, models)
+        train(sess, m_train, m_valid)
 
 if __name__ == '__main__':
   tf.app.run()

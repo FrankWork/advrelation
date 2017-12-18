@@ -25,20 +25,16 @@ class MTLModel(BaseModel):
     
     self.build_task_graph()
 
-  def adversarial_loss(self, input, task_feature, label):
+  def adversarial_loss(self, feature, task_label):
     '''make the task classifier cannot reliably predict the task based on 
     the shared feature
-    Args:
-      input: sentence
-      task_feature: task related feature
-      label: task label
     '''
-    input = tf.stop_gradient(input)
+    # input = tf.stop_gradient(input)
     
-    shared_out = self.shared_layer(input)
-    shared_out = max_pool(shared_out, 500)
+    # shared_out = self.shared_layer(input)
+    # shared_out = max_pool(shared_out, 500)
     
-    feature = flip_gradient(shared_out)
+    feature = flip_gradient(feature)
     if self.is_train:
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
@@ -47,12 +43,12 @@ class MTLModel(BaseModel):
     logits, loss_l2 = linear(feature)
 
     pred = tf.argmax(logits, axis=1)
-    acc = tf.cast(tf.equal(pred, label), tf.float32)
+    acc = tf.cast(tf.equal(pred, task_label), tf.float32)
     self.adv_acc = tf.reduce_mean(acc)
     if not self.adv:
       self.adv_acc = tf.constant(0.)
 
-    label = tf.one_hot(label, TASK_NUM)
+    label = tf.one_hot(task_label, TASK_NUM)
     loss_adv = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=logits))
 
@@ -75,13 +71,10 @@ class MTLModel(BaseModel):
     conv_out = conv_layer(sentence)
     conv_out = max_pool(conv_out, 500)
 
-    shared_out = self.shared_layer(sentence)
-    shared_out = max_pool(shared_out, 500)
-
-    if self.adv:
-      feature = tf.concat([conv_out, shared_out], axis=1)
-    else:
-      feature = conv_out
+    # shared_out = self.shared_layer(sentence)
+    # shared_out = max_pool(shared_out, 500)
+    
+    feature = conv_out
     if self.is_train:
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
@@ -94,10 +87,8 @@ class MTLModel(BaseModel):
                           logits=logits)
     loss_ce = tf.reduce_mean(xentropy)
 
-    loss_adv, loss_adv_l2 = self.adversarial_loss(sentence, conv_out, task)
+    loss_adv, loss_adv_l2 = self.adversarial_loss(conv_out, task)
 
-
-    
     if self.adv:
       self.loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2)
     else:

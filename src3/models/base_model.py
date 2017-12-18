@@ -1,5 +1,6 @@
 import os
 import tensorflow as tf
+from tensorflow.python.framework import ops
 
 flags = tf.app.flags
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
@@ -121,10 +122,30 @@ def max_pool(conv_outs, max_len):
 
   return pools
 
-def optimize(loss, global_step):
+def optimize(loss):
   optimizer = tf.train.AdamOptimizer(FLAGS.lrn_rate)
 
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):# for batch_norm
-    train_op = optimizer.minimize(loss, global_step)
+    train_op = optimizer.minimize(loss)
   return train_op
+
+class FlipGradientBuilder(object):
+  '''Gradient Reversal Layer from https://github.com/pumpikano/tf-dann'''
+  def __init__(self):
+    self.num_calls = 0
+
+  def __call__(self, x, l=1.0):
+    grad_name = "FlipGradient%d" % self.num_calls
+    @ops.RegisterGradient(grad_name)
+    def _flip_gradients(op, grad):
+      return [ tf.negative(grad) * l]
+    
+    g = tf.get_default_graph()
+    with g.gradient_override_map({"Identity": grad_name}):
+      y = tf.identity(x)
+        
+    self.num_calls += 1
+    return y
+    
+flip_gradient = FlipGradientBuilder()
