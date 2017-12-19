@@ -276,4 +276,6 @@ mtl + adv + diff 12.70
 
 300d 
 
-all    10.64
+all           9.91
+mtl           13.02
+mtl+adv+diff  11.45
