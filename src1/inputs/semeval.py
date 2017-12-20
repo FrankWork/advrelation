@@ -205,6 +205,19 @@ def _build_sequence_example(raw_example):
 
   return ex
 
+def _map_tokens_to_ids(raw_example, vocab2id):
+  '''inplace convert sentence from a list of tokens to a list of ids
+  Args:
+    raw_example: an instance of Raw_Example._asdict()
+    vocab2id: dict<token, id> {token0: id0, ...}
+  '''
+  sent_id = []
+  for token in raw_example['sentence']:
+    if token in vocab2id:
+      tok_id = vocab2id[token]
+      sent_id.append(tok_id)
+  raw_example['sentence'] = sent_id
+  
 def write_as_tfrecord(train_data, test_data, vocab2id):
   '''convert the raw data to TFRecord format and write to disk
   '''
@@ -219,7 +232,7 @@ def write_as_tfrecord(train_data, test_data, vocab2id):
                          FLAGS.semeval_max_len, 
                          _build_sequence_example)
 
-  util._shuf_and_write(FLAGS.semeval_train_record)
+  util.shuf_and_write(FLAGS.semeval_train_record)
 
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors

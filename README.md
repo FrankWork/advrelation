@@ -15,7 +15,7 @@
 ## src
 
 - src: SemEval binary MTL
-- src1: SemEval + imdb
+- src1: SemEval + imdb + DBpedia
 - src2: adv_text
 - src3: Fudan-MTL
 - src4: merge fudan-data into one dataset

@@ -47,6 +47,10 @@ def wordpunct_tokenizer(line):
   line = re.sub(r"n't", " n't", line)
   return regexp.findall(line)
 
+def split_by_punct(segment):
+  """Splits str segment by punctuation, filters our empties and spaces."""
+  return [s for s in re.split(r'\W+', segment) if s and not s.isspace()]
+
 def write_vocab(vocab, vocab_file=FLAGS.vocab_file):
   '''write vocab to the file
   
@@ -114,26 +118,26 @@ def trim_embeddings(word_dim):
       id = pretrain_words2id[w]
       word_embed.append(pretrain_embed[id])
     else:
-      vec = np.random.normal(0,0.1,[FLAGS.word_dim])
+      vec = np.random.normal(0,0.1,[word_dim])
       word_embed.append(vec)
   pad_id = -1
-  word_embed[pad_id] = np.zeros([FLAGS.word_dim])
+  word_embed[pad_id] = np.zeros([word_dim])
 
   word_embed = np.asarray(word_embed)
   np.save(trimed_embed_file, word_embed.astype(np.float32))
-  
-def _map_tokens_to_ids(raw_example, vocab2id):
-  '''inplace convert sentence from a list of tokens to a list of ids
-  Args:
-    raw_example: an instance of Raw_Example._asdict()
-    vocab2id: dict<token, id> {token0: id0, ...}
+
+def stat_length(raw_data):
+  '''get max_len and avg_len from data
   '''
-  sent_id = []
-  for token in raw_example['sentence']:
-    if token in vocab2id:
-      tok_id = vocab2id[token]
-      sent_id.append(tok_id)
-  raw_example['sentence'] = sent_id
+  length = [len(example.sentence) for example in raw_data]
+  length = sorted(length)
+  length = np.asarray(length)
+
+  max_len = np.max(length)
+  avg_len = np.mean(length)
+  med_len = np.median(length)
+  print('max_len: %d, avg_len: %d, med_len: %d' %(max_len, avg_len, med_len))
+  
 
 def _pad_or_truncate(raw_example, max_len, pad_id):
   '''inplace pad or truncate a sentence to max_len
@@ -208,11 +212,13 @@ def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
     
     dataset = dataset.batch(batch_size)
     
-    iterator = dataset.make_one_shot_iterator()
-    batch = iterator.get_next()
-    return batch
+    if shuffle:
+      iterator = dataset.make_one_shot_iterator()
+    else:
+      iterator = dataset.make_initializable_iterator()
+    return iterator
 
-def _shuf_and_write(filename):
+def shuf_and_write(filename):
   reader = tf.python_io.tf_record_iterator(filename)
   records = []
   for record in reader:

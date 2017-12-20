@@ -22,6 +22,7 @@ flags.DEFINE_integer("batch_size", 16, "batch size")
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
 flags.DEFINE_boolean('adv', False, 'set True to use adv training')
+
 FLAGS = tf.app.flags.FLAGS
 
 def build_data():
