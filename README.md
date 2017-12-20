@@ -1,10 +1,6 @@
 ## TODO
-- relabel entity position
 
-- input bottleneck problem
-- op with gpu kernel
-
-- multi task learning
+- mtl: DBpedia + SemEval
 
 ## Candidate Methods
 
@@ -15,6 +11,15 @@
 - attention
 - adversarial 
 - distant supervision
+
+## src
+
+- src: SemEval binary MTL
+- src1: SemEval + imdb
+- src2: adv_text
+- src3: Fudan-MTL
+- src4: merge fudan-data into one dataset
+
 
 ## Reference
 
