@@ -126,34 +126,52 @@ def trim_embeddings(word_dim):
   word_embed = np.asarray(word_embed)
   np.save(trimed_embed_file, word_embed.astype(np.float32))
 
-def stat_length(raw_data):
-  '''get max_len and avg_len from data
+def length_statistics(length):
+  '''get maximum, mean, quantile from length
+  Args:
+    length: list<int>
   '''
-  length = [len(example.sentence) for example in raw_data]
   length = sorted(length)
   length = np.asarray(length)
 
   max_len = np.max(length)
   avg_len = np.mean(length)
-  med_len = np.median(length)
-  print('max_len: %d, avg_len: %d, med_len: %d' %(max_len, avg_len, med_len))
-  
 
-def _pad_or_truncate(raw_example, max_len, pad_id):
-  '''inplace pad or truncate a sentence to max_len
+  # p7 = np.percentile(length, 70)
+  # Probability{length < p7} = 0.7
+  percent = [50, 70, 80, 90, 95, 98, 100]
+  quantile = [np.percentile(length, p) for p in percent]
+  
+  print('(percent, quantile)', list(zip(percent, quantile)))
+
+def map_tokens_to_ids(tokens, token2id):
+  '''convert a list of tokens to a list of ids
   Args:
-    raw_example: an instance of Raw_Example._asdict()
-    max_len: int
-    pad_id: token id of PAD_WORD
+    tokens: list, [token0, token1, .. ]
+    token2id: dict<token, id> {token0: id0, ...}
+  '''
+  ids = []
+  for token in tokens:
+    if token in token2id:
+      tok_id = token2id[token]
+      ids.append(tok_id)
+  return ids
+
+def pad_or_truncate(tokens, max_len, pad_val=PAD_WORD):
+  '''pad or truncate a list of tokens to max_len
+  Args:
+    tokens: list, [token0, token1, .. ]
+    max_len: int, truncate if len(tokens) > max_len
+    pad_val: padding value, pad if len(tokens) < max_len
   '''
   # truncate if len(sentence) > max_len
   # else nothing happens
-  raw_example['sentence'] = raw_example['sentence'][:max_len]
+  tokens = tokens[:max_len] 
 
   # pad if len(sentence) < max_len
   # else nothing happens
-  pad_n = max_len - len(raw_example['sentence'])
-  raw_example['sentence'].extend(pad_n*[pad_id])
+  pad_n = max_len - len(tokens)
+  tokens.extend(pad_n*[pad_val])
 
 def _write_text_for_debug(text_writer, raw_example, vocab2id):
   '''write raw_example['sentence'] to the disk, for debug 
@@ -169,14 +187,14 @@ def _write_text_for_debug(text_writer, raw_example, vocab2id):
       tokens.append(token)
   text_writer.write(' '.join(tokens) + '\n')
       
-def write_as_tfrecord(raw_data, vocab2id, filename, max_len, build_func):
+def write_as_tfrecord(raw_data, vocab2id, filename, map_func, build_func):
   '''convert the raw data to TFRecord format and write to disk
 
   Args:
     raw_data: a list of Raw_Example
     vocab2id: dict<token, id>
     filename: file to write in
-    max_len: int, pad or truncate sentence to max_len
+    map_func: function to inplace convert Raw_Example from token to ids
     build_func: function to convert Raw_Example to tf.train.SequenceExample
   '''
   writer = tf.python_io.TFRecordWriter(filename)
@@ -187,9 +205,8 @@ def write_as_tfrecord(raw_data, vocab2id, filename, max_len, build_func):
     raw_example = raw_example._asdict()
 
     _write_text_for_debug(text_writer, raw_example, vocab2id)
-    _map_tokens_to_ids(raw_example, vocab2id)
-    _pad_or_truncate  (raw_example, max_len, pad_id)
-    
+
+    map_func(raw_example, vocab2id)
     example = build_func(raw_example)
     writer.write(example.SerializeToString())
   writer.close()

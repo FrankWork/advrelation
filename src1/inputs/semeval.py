@@ -28,7 +28,7 @@ flags.DEFINE_string("relations_file", "data/SemEval/relations.txt",
 flags.DEFINE_string("results_file", "data/generated/results.txt", 
                              "predicted results file")
 
-flags.DEFINE_integer("semeval_max_len", 98, "max length of sentences")
+flags.DEFINE_integer("semeval_max_len", 97, "max length of sentences")
 
 FLAGS = flags.FLAGS
 
@@ -101,10 +101,19 @@ def _load_raw_data(filename, relation2id):
 
   return data
 
-def load_raw_data():
+def _length_statistics(raw_train_data, raw_test_data):
+  '''statistics info of the length'''
+  print('SemEval sentence length:')
+  length1 = [len(example.sentence) for example in raw_train_data]
+  length2 = [len(example.sentence) for example in raw_test_data]
+  util.length_statistics(length1 + length2)
+
+def load_raw_data(verbose=False):
   relation2id, _ = _load_relations()
   train_data = _load_raw_data(FLAGS.semeval_train_file, relation2id)
   test_data = _load_raw_data(FLAGS.semeval_test_file, relation2id)
+  if verbose:
+    _length_statistics(train_data, test_data)
   return train_data, test_data
 
 def build_vocab(raw_data):
@@ -116,6 +125,15 @@ def build_vocab(raw_data):
 
   util.write_vocab(vocab, FLAGS.semeval_vocab_file)
   return vocab
+
+def _map_tokens_and_pad(raw_example, vocab2id):
+  '''inplace map tokens in raw_example to ids
+  Args:
+    raw_example: type Raw_Example._asdict()
+    vocab2id: dict<token, id>
+  '''
+  sentence = util.pad_or_truncate(raw_example['sentence'], FLAGS.semeval_max_len)
+  raw_example['sentence'] = util.map_tokens_to_ids(sentence, vocab2id)
 
 def _lexical_feature(raw_example):
   def _entity_context(e_idx, sent):
@@ -224,12 +242,12 @@ def write_as_tfrecord(train_data, test_data, vocab2id):
   util.write_as_tfrecord(train_data, 
                          vocab2id, 
                          FLAGS.semeval_train_record, 
-                         FLAGS.semeval_max_len, 
+                         _map_tokens_and_pad, 
                          _build_sequence_example)
   util.write_as_tfrecord(test_data, 
                          vocab2id, 
                          FLAGS.semeval_test_record, 
-                         FLAGS.semeval_max_len, 
+                         _map_tokens_and_pad, 
                          _build_sequence_example)
 
   util.shuf_and_write(FLAGS.semeval_train_record)
@@ -268,7 +286,7 @@ def read_tfrecord(epoch, batch_size):
                               shuffle=True)
   test_data = util.read_tfrecord(FLAGS.semeval_test_record, 
                               epoch, 
-                              2717, 
+                              batch_size, 
                               _parse_tfexample,
                               shuffle=False)
 

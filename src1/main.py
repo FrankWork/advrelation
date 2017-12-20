@@ -40,9 +40,6 @@ def build_data():
     print('dbpedia semeval union vocab: %d' % len(union_vocab))
 
     util.write_vocab(union_vocab)
-
-    util.stat_length(dbpedia_data)
-    util.stat_length(semeval_data)
     
   def _build_data(dbpedia_train, dbpedia_test, semeval_train, semeval_test):
     vocab2id = util.load_vocab2id()
@@ -58,11 +55,10 @@ def build_data():
     util.trim_embeddings(300)
 
   print('load raw data')
-  dbpedia_train, dbpedia_test = dbpedia.load_raw_data()
-  semeval_train, semeval_test = semeval.load_raw_data()
-  
+  dbpedia_train, dbpedia_test = dbpedia.load_raw_data(verbose=False)
+  semeval_train, semeval_test = semeval.load_raw_data(verbose=False)
+
   _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
-  exit()
 
   _build_data(dbpedia_train, dbpedia_test, semeval_train, semeval_test)
 
