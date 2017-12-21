@@ -1,4 +1,5 @@
 import os
+import tensorflow as tf
 from collections import namedtuple, defaultdict
 
 from inputs import util

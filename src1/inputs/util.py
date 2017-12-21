@@ -172,6 +172,8 @@ def pad_or_truncate(tokens, max_len, pad_val=PAD_WORD):
   # else nothing happens
   pad_n = max_len - len(tokens)
   tokens.extend(pad_n*[pad_val])
+  
+  return tokens
 
 def _write_text_for_debug(text_writer, raw_example, vocab2id):
   '''write raw_example['sentence'] to the disk, for debug 

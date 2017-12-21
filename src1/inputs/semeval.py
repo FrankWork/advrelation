@@ -1,8 +1,7 @@
 import re
 import os
 import tensorflow as tf
-from collections import defaultdict
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 
 from inputs import util
 
@@ -222,19 +221,6 @@ def _build_sequence_example(raw_example):
     pos.int64_list.value.append(pos_val)
 
   return ex
-
-def _map_tokens_to_ids(raw_example, vocab2id):
-  '''inplace convert sentence from a list of tokens to a list of ids
-  Args:
-    raw_example: an instance of Raw_Example._asdict()
-    vocab2id: dict<token, id> {token0: id0, ...}
-  '''
-  sent_id = []
-  for token in raw_example['sentence']:
-    if token in vocab2id:
-      tok_id = vocab2id[token]
-      sent_id.append(tok_id)
-  raw_example['sentence'] = sent_id
   
 def write_as_tfrecord(train_data, test_data, vocab2id):
   '''convert the raw data to TFRecord format and write to disk
