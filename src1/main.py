@@ -157,13 +157,13 @@ def main(_):
   with tf.Graph().as_default():
     semeval_train, semeval_test = semeval.read_tfrecord(
                                           FLAGS.num_epochs, FLAGS.batch_size)
-    imdb_train, imdb_test = imdb.read_tfrecord(
+    dbpedia_train, dbpedia_test = dbpedia.read_tfrecord(
                                           FLAGS.num_epochs, FLAGS.batch_size)
       
     m_train, m_valid = mtl_model.build_train_valid_model(
                                           word_embed, 
                                           semeval_train, semeval_test, 
-                                          imdb_train, imdb_test)
+                                          dbpedia_train, dbpedia_test)
     m_train.set_saver('mtl-%d-%d' % (FLAGS.num_epochs, FLAGS.word_dim))
     m_train.build_train_op()
     init_op = tf.group(tf.global_variables_initializer(),
