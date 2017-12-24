@@ -15,11 +15,10 @@ from models import mtl_model
 flags = tf.app.flags
 
 flags.DEFINE_integer("word_dim", 300, "word embedding size")
-flags.DEFINE_integer("num_epochs", 200, "number of epochs")
-flags.DEFINE_integer("batch_size", 50, "batch size")
+flags.DEFINE_integer("num_epochs", 100, "number of epochs")
+flags.DEFINE_integer("batch_size", 16, "batch size")
 
 flags.DEFINE_boolean('test', False, 'set True to test')
-flags.DEFINE_boolean('trace', False, 'set True to trace runtime bottleneck')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
 flags.DEFINE_boolean('adv', False, 'set True to use adv training')
 
@@ -44,8 +43,8 @@ def build_data():
   def _build_data(dbpedia_train, dbpedia_test, semeval_train, semeval_test):
     vocab2id = util.load_vocab2id()
 
-    print('convert semeval data to TFRecord')
-    semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
+    # print('convert semeval data to TFRecord')
+    # semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
     print('convert dbpedia data to TFRecord')
     dbpedia.write_as_tfrecord(dbpedia_train, dbpedia_test, vocab2id)
 
@@ -58,7 +57,7 @@ def build_data():
   dbpedia_train, dbpedia_test = dbpedia.load_raw_data(verbose=False)
   semeval_train, semeval_test = semeval.load_raw_data(verbose=False)
 
-  _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
+  # _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
 
   _build_data(dbpedia_train, dbpedia_test, semeval_train, semeval_test)
 
@@ -85,34 +84,35 @@ def trace_runtime(sess, m_train):
   trace_file.write(trace.generate_chrome_trace_format())
   trace_file.close()
 
-def train(sess, m_train, m_valid):
-  imdb_train_fetch =    [m_train.imdb_train, 
-                         m_train.imdb_loss, m_train.imdb_accuracy]
-  semeval_train_fetch = [m_train.semeval_train, 
-                         m_train.semeval_loss, m_train.semeval_accuracy]
-
+def train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
   best_acc, best_step= 0., 0
   start_time = time.time()
   orig_begin_time = start_time
 
   for epoch in range(FLAGS.num_epochs):
-    # train imdb and SemEval
-    imdb_loss, imdb_acc = 0., 0.
-    sem_loss, sem_acc = 0., 0.
-    for batch in range(160):
-      _, loss, acc = sess.run(imdb_train_fetch)
-      imdb_loss += loss
-      imdb_acc += acc
+    sess.run([semeval_test_iter.initializer, dbpedia_test_iter.initializer])
 
-      _, loss, acc = sess.run(semeval_train_fetch)
+    # train dbpedia and SemEval
+    dbpedia_loss, dbpedia_acc = 0., 0.
+    sem_loss, sem_acc = 0., 0.
+    for batch in range(500):
+      acc, loss,_ = m_train.tensors[0]
+      train_op = m_train.train_ops[0]
+      _, loss, acc = sess.run([train_op, loss, acc])
+      dbpeida_loss += loss
+      dbpeida_acc += acc
+      
+      acc, loss,_ = m_train.tensors[1]
+      train_op = m_train.train_ops[1]
+      _, loss, acc = sess.run([train_op, loss, acc])
       sem_loss += loss
       sem_acc += acc
+      
+    dbpedia_loss /= 500
+    dbpedia_acc /= 500
 
-    imdb_loss /= 160
-    imdb_acc /= 160
-
-    sem_loss /= 160
-    sem_acc /= 160
+    sem_loss /= 500
+    sem_acc /= 500
 
     # epoch duration
     now = time.time()
@@ -120,17 +120,29 @@ def train(sess, m_train, m_valid):
     start_time = now
 
     # valid accuracy
-    # imdb_valid_acc = 0
-    imdb_valid_acc = sess.run(m_valid.imdb_accuracy)
-    sem_valid_acc = sess.run(m_valid.semeval_accuracy)
+    sem_valid_acc = 0.
+    dbpedia_valid_acc = 0.
+    while True:
+      try:
+        _, _, acc_tenser = m_valid.tensors[0]
+        acc = sess.run(acc_tenser)
+        dbpedia_valid_acc += acc
+
+        _, _, acc_tenser = m_valid.tensors[1]
+        acc = sess.run(acc_tenser)
+        sem_valid_acc += acc
+      except tf.errors.OutOfRangeError:
+        break
+    sem_valid_acc /= 170
+    dbpedia_valid_acc /= 170
 
     if best_acc < sem_valid_acc:
       best_acc = sem_valid_acc
       best_step = sess.run(m_train.global_step)
       m_train.save(sess, best_step)
     
-    print("Epoch %d imdb %.2f %.2f %.4f sem %.2f %.2f %.4f time %.2f" % 
-             (epoch, imdb_loss, imdb_acc, imdb_valid_acc, 
+    print("Epoch %d dbpedia %.2f %.2f %.4f sem %.2f %.2f %.4f time %.2f" % 
+             (epoch, dbpedia_loss, dbpedia_acc, dbpedia_valid_acc, 
                       sem_loss, sem_acc, sem_valid_acc, duration))
     sys.stdout.flush()
   
@@ -155,17 +167,20 @@ def main(_):
 
   word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
   with tf.Graph().as_default():
-    semeval_train, semeval_test = semeval.read_tfrecord(
+    semeval_train_iter, semeval_test_iter = semeval.read_tfrecord(
                                           FLAGS.num_epochs, FLAGS.batch_size)
-    dbpedia_train, dbpedia_test = dbpedia.read_tfrecord(
+    dbpedia_train_iter, dbpedia_test_iter = dbpedia.read_tfrecord(
                                           FLAGS.num_epochs, FLAGS.batch_size)
-      
+    model_name = 'mtl-dbpedia-%d' % FLAGS.word_dim
+    semeval_train = semeval_train_iter.get_next()
+    semeval_test = semeval_test_iter.get_next()
+    dbpedia_train = dbpedia_train_iter.get_next()
+    dbpedia_test = dbpedia_test_iter.get_next()
     m_train, m_valid = mtl_model.build_train_valid_model(
-                                          word_embed, 
+                                          model_name, word_embed, 
                                           semeval_train, semeval_test, 
-                                          dbpedia_train, dbpedia_test)
-    m_train.set_saver('mtl-%d-%d' % (FLAGS.num_epochs, FLAGS.word_dim))
-    m_train.build_train_op()
+                                          dbpedia_train, dbpedia_test, FLAGS.adv)
+    
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
     config = tf.ConfigProto()
@@ -175,12 +190,14 @@ def main(_):
       sess.run(init_op)
       print('='*80)
 
-      if FLAGS.trace:
-        trace_runtime(sess, m_train)
-      elif FLAGS.test:
+      for tensor in sess.run(dbpedia_train):
+        print(tensor.shape)
+      exit()
+
+      if FLAGS.test:
         test(sess, m_valid)
       else:
-        train(sess, m_train, m_valid)
+        train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter)
 
 if __name__ == '__main__':
   tf.app.run()
