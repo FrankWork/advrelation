@@ -120,8 +120,8 @@ def max_pool(conv_outs, max_len):
 
   return pools
 
-def optimize(loss):
-  optimizer = tf.train.AdamOptimizer(FLAGS.lrn_rate)
+def optimize(loss, lrn_rate):
+  optimizer = tf.train.AdamOptimizer(lrn_rate)
 
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):# for batch_norm

@@ -179,7 +179,7 @@ class MTLModel(BaseModel):
     if self.is_adv:
       loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2) + loss_diff
     else:
-      loss = loss_ce  + FLAGS.l2_coef*loss_l2
+      loss = loss_ce + FLAGS.l2_coef*loss_l2
 
     pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)
@@ -190,9 +190,15 @@ class MTLModel(BaseModel):
   def build_train_op(self):
     if self.is_train:
       self.train_ops = []
-      for _, loss, _ in self.tensors:
-        train_op = optimize(loss)
-        self.train_ops.append(train_op)
+      
+      _, loss, _ = self.tensors[0] 
+      train_op = optimize(loss, 0.0001)
+      self.train_ops.append(train_op)
+
+      _, loss, _ = self.tensors[1] 
+      train_op = optimize(loss, 0.001)
+      self.train_ops.append(train_op)
+
 
 def build_train_valid_model(model_name, word_embed, 
                             semeval_train, semeval_test, 

@@ -61,7 +61,9 @@ def build_vocab(raw_data):
   vocab = set()
   for example in raw_data:
     for w in example.sentence:
-        vocab.add(w)
+      vocab.add(w)
+    for w in example.entity:
+      vocab.add(w)
   
   util.write_vocab(vocab, DBPEDIA_VOCAB_FILE)
   return vocab
@@ -73,15 +75,9 @@ def _map_tokens_and_pad(raw_example, vocab2id):
     vocab2id: dict<token, id>
   '''
   entity = util.pad_or_truncate(raw_example['entity'], 3)
-  try:
-    assert len(entity) == 3
-  except AssertionError:
-    print(raw_example['entity'])
-    print(entity)
-    exit()
+  raw_example['entity'] = util.map_tokens_to_ids(entity, vocab2id)
 
   sentence = util.pad_or_truncate(raw_example['sentence'], DBPEDIA_MAX_LEN)
-  raw_example['entity'] = util.map_tokens_to_ids(entity, vocab2id)
   raw_example['sentence'] = util.map_tokens_to_ids(sentence, vocab2id)
 
 def _build_sequence_example(raw_example):
@@ -101,12 +97,6 @@ def _build_sequence_example(raw_example):
   ex.context.feature['label'].int64_list.value.append(label)
 
   entity = raw_example['entity']
-  try:
-    assert len(entity) == 3
-  except AssertionError:
-    print(raw_example['entity'])
-    print(entity)
-    exit()
   ex.context.feature['entity'].int64_list.value.extend(entity)
 
   for word_id in raw_example['sentence']:
