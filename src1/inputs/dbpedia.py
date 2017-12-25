@@ -29,6 +29,7 @@ def _load_raw_data(filename):
       assert len(segments) == 3
       
       label = int(segments[0])
+      # label += 19
       entity   = util.split_by_punct( segments[1].strip('"') )
       sentence = util.wordpunct_tokenizer( segments[2].strip('"') )
 

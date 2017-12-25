@@ -13,6 +13,7 @@ FLAGS = flags.FLAGS
 MAX_LEN = 97
 SEM_CLASS_NUM = 19
 DB_CLASS_NUM = 14
+# CLASS_NUM = SEM_CLASS_NUM + DB_CLASS_NUM
 TASK_NUM = 2
 
 class MTLModel(BaseModel):
@@ -196,7 +197,7 @@ class MTLModel(BaseModel):
       self.train_ops.append(train_op)
 
       _, loss, _ = self.tensors[1] 
-      train_op = optimize(loss, 0.001)
+      train_op = optimize(loss, 0.0001)
       self.train_ops.append(train_op)
 
 
