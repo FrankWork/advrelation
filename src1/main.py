@@ -16,11 +16,12 @@ flags = tf.app.flags
 
 flags.DEFINE_integer("word_dim", 300, "word embedding size")
 flags.DEFINE_integer("num_epochs", 100, "number of epochs")
-flags.DEFINE_integer("batch_size", 16, "batch size")
+flags.DEFINE_integer("batch_size", 100, "batch size")
 
 flags.DEFINE_boolean('test', False, 'set True to test')
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
-flags.DEFINE_boolean('adv', False, 'set True to use adv training')
+flags.DEFINE_boolean('is_mtl', True, 'set True to use multi-task learning')
+flags.DEFINE_boolean('is_adv', False, 'set True to use adv training')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -84,7 +85,7 @@ def trace_runtime(sess, m_train):
   trace_file.write(trace.generate_chrome_trace_format())
   trace_file.close()
 
-def train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
+def train0(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
   best_acc, best_epoch = 0., 0
   start_time = time.time()
   orig_begin_time = start_time
@@ -153,6 +154,71 @@ def train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
 
+def train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
+  best_acc, best_epoch = 0., 0
+  start_time = time.time()
+  orig_begin_time = start_time
+
+  for epoch in range(25):
+    print('epoch %d for dbpedia' % epoch)
+    sess.run(dbpedia_test_iter.initializer)
+    dbpedia_loss, dbpedia_acc = 0., 0.
+
+    for batch in range(80):
+      acc, loss,_ = m_train.tensors[0]
+      train_op = m_train.train_ops[0]
+      _, loss, acc = sess.run([train_op, loss, acc])
+      dbpedia_loss += loss
+      dbpedia_acc += acc
+
+    dbpedia_loss /= 80
+    dbpedia_acc /= 80
+
+
+  for epoch in range(FLAGS.num_epochs):
+    sess.run(semeval_test_iter.initializer)
+
+    # train dbpedia and SemEval
+    
+    sem_loss, sem_acc = 0., 0.
+    for batch in range(80):
+      acc, loss,_ = m_train.tensors[1]
+      train_op = m_train.train_ops[1]
+      _, loss, acc = sess.run([train_op, loss, acc])
+      sem_loss += loss
+      sem_acc += acc
+
+    sem_loss /= 80
+    sem_acc /= 80
+
+    # epoch duration
+    now = time.time()
+    duration = now - start_time
+    start_time = now
+
+    # valid accuracy
+    sem_valid_acc = 0.
+    for batch in range(170):
+      acc_tenser, _, _ = m_valid.tensors[1]
+      acc = sess.run(acc_tenser)
+      sem_valid_acc += acc
+    sem_valid_acc /= 170
+
+    if best_acc < sem_valid_acc:
+      best_acc = sem_valid_acc
+      best_epoch = epoch
+      m_train.save(sess, epoch)
+    
+    print("Epoch %d sem %.2f %.2f %.4f time %.2f" % 
+             (epoch, sem_loss, sem_acc, sem_valid_acc, duration))
+    sys.stdout.flush()
+  
+  duration = time.time() - orig_begin_time
+  duration /= 3600
+  print('Done training, best_epoch: %d, best_acc: %.4f' % (best_epoch, best_acc))
+  print('duration: %.2f hours' % duration)
+  sys.stdout.flush()
+
 def test(sess, m_valid):
   m_valid.restore(sess)
   fetches = [m_valid.semeval_accuracy, m_valid.semeval_pred]
@@ -180,7 +246,8 @@ def main(_):
     m_train, m_valid = mtl_model.build_train_valid_model(
                                           model_name, word_embed, 
                                           semeval_train, semeval_test, 
-                                          dbpedia_train, dbpedia_test, FLAGS.adv)
+                                          dbpedia_train, dbpedia_test, 
+                                          FLAGS.is_mtl, FLAGS.is_adv)
     
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue

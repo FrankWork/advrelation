@@ -13,16 +13,17 @@ FLAGS = flags.FLAGS
 MAX_LEN = 97
 SEM_CLASS_NUM = 19
 DB_CLASS_NUM = 14
-# CLASS_NUM = SEM_CLASS_NUM + DB_CLASS_NUM
+CLASS_NUM = SEM_CLASS_NUM + DB_CLASS_NUM
 TASK_NUM = 2
 
 class MTLModel(BaseModel):
   '''Multi Task Learning'''
 
-  def __init__(self, word_embed, semeval_data, dbpedia_data, is_adv, is_train):
+  def __init__(self, word_embed, semeval_data, dbpedia_data, is_mtl, is_adv, is_train):
     # input data
     self.is_train = is_train
     self.is_adv = is_adv
+    self.is_mtl = is_mtl
 
     # embedding initialization
     self.word_dim = word_embed.shape[1]
@@ -107,7 +108,7 @@ class MTLModel(BaseModel):
     shared_out = self.shared_conv(sentence)
     shared_out = max_pool(shared_out, MAX_LEN)
   
-    if self.is_adv:
+    if self.is_mtl:
       feature = tf.concat([lexical, conv_out, shared_out], axis=1)
     else:
       feature = tf.concat([lexical, conv_out], axis=1)
@@ -116,11 +117,11 @@ class MTLModel(BaseModel):
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 19 classes
-    linear = LinearLayer('linear_semeval', SEM_CLASS_NUM, True)
+    linear = LinearLayer('linear_semeval', CLASS_NUM, True)
     logits, loss_l2 = linear(feature)
 
     xentropy = tf.nn.softmax_cross_entropy_with_logits(
-                                  labels=tf.one_hot(labels, SEM_CLASS_NUM), 
+                                  labels=tf.one_hot(labels, CLASS_NUM), 
                                   logits=logits)
     loss_ce = tf.reduce_mean(xentropy)
 
@@ -156,7 +157,7 @@ class MTLModel(BaseModel):
     shared_out = self.shared_conv(sentence)
     shared_out = max_pool(shared_out, MAX_LEN)
 
-    if self.is_adv:
+    if self.is_mtl:
       feature = tf.concat([entity, conv_out, shared_out], axis=1)
     else:
       feature = tf.concat([entity, conv_out], axis=1)
@@ -165,11 +166,11 @@ class MTLModel(BaseModel):
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 14 classes
-    linear = LinearLayer('linear_dbpedia', DB_CLASS_NUM, True)
+    linear = LinearLayer('linear_dbpedia', CLASS_NUM, True)
     logits, loss_l2 = linear(feature)
 
     xentropy = tf.nn.softmax_cross_entropy_with_logits(
-                                  labels=tf.one_hot(labels, DB_CLASS_NUM), 
+                                  labels=tf.one_hot(labels, CLASS_NUM), 
                                   logits=logits)
     loss_ce = tf.reduce_mean(xentropy)
 
@@ -197,20 +198,20 @@ class MTLModel(BaseModel):
       self.train_ops.append(train_op)
 
       _, loss, _ = self.tensors[1] 
-      train_op = optimize(loss, 0.0001)
+      train_op = optimize(loss, 0.001)
       self.train_ops.append(train_op)
 
 
 def build_train_valid_model(model_name, word_embed, 
                             semeval_train, semeval_test, 
-                            dbpedia_train, dbpedia_test, is_adv):
+                            dbpedia_train, dbpedia_test, is_mtl, is_adv):
   with tf.name_scope("Train"):
     with tf.variable_scope('MTLModel', reuse=None):
-      m_train = MTLModel(word_embed, semeval_train, dbpedia_train, is_adv, is_train=True)
+      m_train = MTLModel(word_embed, semeval_train, dbpedia_train, is_mtl, is_adv, is_train=True)
       m_train.set_saver(model_name)
       m_train.build_train_op()
   with tf.name_scope('Valid'):
     with tf.variable_scope('MTLModel', reuse=True):
-      m_valid = MTLModel(word_embed, semeval_test, dbpedia_test, is_adv, is_train=False)
+      m_valid = MTLModel(word_embed, semeval_test, dbpedia_test, is_mtl, is_adv, is_train=False)
       m_valid.set_saver(model_name)
   return m_train, m_valid
