@@ -1,46 +1,27 @@
-Epoch 0 dbpedia 9.09 0.08 0.3024 sem 0.00 0.00 0.0000 time 14.18
-Epoch 1 dbpedia 7.09 0.12 0.5039 sem 0.00 0.00 0.0000 time 23.91
-Epoch 2 dbpedia 5.98 0.16 0.6186 sem 0.00 0.00 0.0000 time 23.23
-Epoch 3 dbpedia 5.10 0.20 0.6882 sem 0.00 0.00 0.0000 time 24.38
-Epoch 4 dbpedia 4.33 0.24 0.7153 sem 0.00 0.00 0.0000 time 23.85
-Epoch 5 dbpedia 3.73 0.29 0.7533 sem 0.00 0.00 0.0000 time 23.99
-Epoch 6 dbpedia 3.25 0.33 0.7739 sem 0.00 0.00 0.0000 time 24.27
-Epoch 7 dbpedia 2.82 0.38 0.7822 sem 0.00 0.00 0.0000 time 25.67
-Epoch 8 dbpedia 2.46 0.41 0.8008 sem 0.00 0.00 0.0000 time 23.85
-Epoch 9 dbpedia 2.29 0.44 0.8016 sem 0.00 0.00 0.0000 time 23.94
-Epoch 10 dbpedia 2.03 0.48 0.8195 sem 0.00 0.00 0.0000 time 24.34
-Epoch 11 dbpedia 1.95 0.50 0.8213 sem 0.00 0.00 0.0000 time 25.24
-Epoch 12 dbpedia 1.85 0.51 0.8310 sem 0.00 0.00 0.0000 time 23.75
-Epoch 13 dbpedia 1.63 0.54 0.8341 sem 0.00 0.00 0.0000 time 24.43
-Epoch 14 dbpedia 1.59 0.55 0.8380 sem 0.00 0.00 0.0000 time 24.14
-Epoch 15 dbpedia 1.46 0.58 0.8490 sem 0.00 0.00 0.0000 time 24.14
-Epoch 16 dbpedia 1.44 0.59 0.8498 sem 0.00 0.00 0.0000 time 24.96
-Epoch 17 dbpedia 1.38 0.61 0.8578 sem 0.00 0.00 0.0000 time 24.44
-Epoch 18 dbpedia 1.34 0.62 0.8588 sem 0.00 0.00 0.0000 time 24.48
-Epoch 19 dbpedia 1.36 0.63 0.8594 sem 0.00 0.00 0.0000 time 24.63
-Epoch 20 dbpedia 1.35 0.63 0.8631 sem 0.00 0.00 0.0000 time 24.06
-Epoch 21 dbpedia 1.39 0.62 0.8619 sem 0.00 0.00 0.0000 time 23.86
-Epoch 22 dbpedia 1.39 0.64 0.8649 sem 0.00 0.00 0.0000 time 24.71
-Epoch 23 dbpedia 1.49 0.61 0.8687 sem 0.00 0.00 0.0000 time 24.40
-Epoch 24 dbpedia 1.49 0.63 0.8690 sem 0.00 0.00 0.0000 time 23.60
-Epoch 25 dbpedia 1.55 0.63 0.8679 sem 0.00 0.00 0.0000 time 24.31
-Epoch 26 dbpedia 1.64 0.62 0.8543 sem 0.00 0.00 0.0000 time 24.82
-Epoch 27 dbpedia 1.79 0.61 0.8702 sem 0.00 0.00 0.0000 time 23.79
-Epoch 28 dbpedia 1.83 0.61 0.8699 sem 0.00 0.00 0.0000 time 23.55
-Epoch 29 dbpedia 2.01 0.59 0.8668 sem 0.00 0.00 0.0000 time 25.01
-Epoch 30 dbpedia 2.11 0.59 0.8657 sem 0.00 0.00 0.0000 time 24.99
-Epoch 31 dbpedia 2.32 0.58 0.8640 sem 0.00 0.00 0.0000 time 27.22
-Epoch 32 dbpedia 2.44 0.56 0.8577 sem 0.00 0.00 0.0000 time 24.84
-Epoch 33 dbpedia 2.61 0.57 0.8538 sem 0.00 0.00 0.0000 time 23.71
-Epoch 34 dbpedia 2.78 0.55 0.8532 sem 0.00 0.00 0.0000 time 24.17
-Epoch 35 dbpedia 3.00 0.54 0.8547 sem 0.00 0.00 0.0000 time 23.93
-Epoch 36 dbpedia 3.27 0.53 0.8560 sem 0.00 0.00 0.0000 time 24.15
-Epoch 37 dbpedia 3.30 0.53 0.8138 sem 0.00 0.00 0.0000 time 24.26
-Epoch 38 dbpedia 3.29 0.52 0.8478 sem 0.00 0.00 0.0000 time 23.79
-Epoch 39 dbpedia 3.52 0.51 0.8120 sem 0.00 0.00 0.0000 time 24.05
-Epoch 40 dbpedia 3.68 0.51 0.8369 sem 0.00 0.00 0.0000 time 24.39
-Epoch 41 dbpedia 3.94 0.50 0.8106 sem 0.00 0.00 0.0000 time 25.11
-Epoch 42 dbpedia 3.98 0.51 0.8165 sem 0.00 0.00 0.0000 time 24.60
+$ dbpedia
+
+Epoch 0 dbpedia 11.19 0.12 0.5571 time 20.67
+Epoch 1 dbpedia 7.00 0.25 0.7369 time 27.11
+Epoch 2 dbpedia 4.91 0.37 0.8177 time 25.44
+Epoch 3 dbpedia 3.73 0.45 0.8664 time 25.80
+Epoch 4 dbpedia 3.01 0.53 0.8705 time 25.56
+Epoch 5 dbpedia 2.57 0.58 0.8835 time 24.18
+Epoch 6 dbpedia 2.31 0.62 0.8979 time 26.64
+Epoch 7 dbpedia 2.19 0.64 0.9127 time 34.00
+Epoch 8 dbpedia 2.18 0.66 0.9076 time 33.46
+Epoch 9 dbpedia 2.37 0.66 0.9241 time 25.40
+Epoch 10 dbpedia 2.70 0.66 0.9311 time 29.47
+Epoch 11 dbpedia 3.28 0.64 0.9274 time 28.95
+Epoch 12 dbpedia 4.07 0.62 0.9288 time 25.35
+Epoch 13 dbpedia 5.03 0.59 0.9200 time 23.68
+Epoch 14 dbpedia 6.24 0.56 0.9457 time 24.61
+Epoch 15 dbpedia 7.45 0.54 0.8974 time 26.20
+Epoch 16 dbpedia 8.80 0.52 0.9039 time 24.04
+Epoch 17 dbpedia 10.19 0.50 0.8932 time 25.25
+Epoch 18 dbpedia 11.34 0.49 0.8718 time 23.63
+Epoch 19 dbpedia 12.56 0.48 0.8466 time 23.52
+Epoch 20 dbpedia 13.71 0.47 0.8268 time 23.64
+
 
 
 

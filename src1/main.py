@@ -46,8 +46,8 @@ def build_data():
 
     print('convert semeval data to TFRecord')
     semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
-    print('convert dbpedia data to TFRecord')
-    dbpedia.write_as_tfrecord(dbpedia_train, dbpedia_test, vocab2id)
+    # print('convert dbpedia data to TFRecord')
+    # dbpedia.write_as_tfrecord(dbpedia_train, dbpedia_test, vocab2id)
 
   def _trim_embed():
     print('trimming pretrained embeddings')
@@ -55,14 +55,15 @@ def build_data():
     util.trim_embeddings(300)
 
   print('load raw data')
-  dbpedia_train, dbpedia_test = dbpedia.load_raw_data(verbose=False)
+  dbpedia_train, dbpedia_test = None, None
+  # dbpedia_train, dbpedia_test = dbpedia.load_raw_data(verbose=False)
   semeval_train, semeval_test = semeval.load_raw_data(verbose=False)
 
-  _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
+  # _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
 
   _build_data(dbpedia_train, dbpedia_test, semeval_train, semeval_test)
 
-  _trim_embed()
+  # _trim_embed()
   
 def trace_runtime(sess, m_train):
   '''
@@ -219,6 +220,53 @@ def train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
 
+def train_dbpedia(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
+  best_acc, best_epoch = 0., 0
+  start_time = time.time()
+  orig_begin_time = start_time
+
+  for epoch in range(FLAGS.num_epochs):
+    sess.run(dbpedia_test_iter.initializer)
+    dbpedia_loss, dbpedia_acc = 0., 0.
+
+    for batch in range(560):
+      acc, loss,_ = m_train.tensors[0]
+      train_op = m_train.train_ops[0]
+      _, loss, acc = sess.run([train_op, loss, acc])
+      dbpedia_loss += loss
+      dbpedia_acc += acc
+
+    dbpedia_loss /= 560
+    dbpedia_acc /= 560
+
+    # epoch duration
+    now = time.time()
+    duration = now - start_time
+    start_time = now
+
+    # valid accuracy
+    dbpedia_valid_acc = 0.
+    for batch in range(170):
+      acc_tenser, _, _ = m_valid.tensors[0]
+      acc = sess.run(acc_tenser)
+      dbpedia_valid_acc += acc
+    dbpedia_valid_acc /= 170
+
+    if best_acc < dbpedia_valid_acc:
+      best_acc = dbpedia_valid_acc
+      best_epoch = epoch
+      m_train.save(sess, epoch)
+
+    print("Epoch %d dbpedia %.2f %.2f %.4f time %.2f" % 
+             (epoch, dbpedia_loss, dbpedia_acc, dbpedia_valid_acc, duration))
+    sys.stdout.flush()
+  
+  duration = time.time() - orig_begin_time
+  duration /= 3600
+  print('Done training, best_epoch: %d, best_acc: %.4f' % (best_epoch, best_acc))
+  print('duration: %.2f hours' % duration)
+  sys.stdout.flush()
+
 def test(sess, m_valid):
   m_valid.restore(sess)
   fetches = [m_valid.semeval_accuracy, m_valid.semeval_pred]
@@ -261,7 +309,8 @@ def main(_):
       if FLAGS.test:
         test(sess, m_valid)
       else:
-        train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter)
+        train_dbpedia(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter)
+        # train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter)
 
 if __name__ == '__main__':
   tf.app.run()

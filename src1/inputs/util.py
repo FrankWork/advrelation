@@ -189,7 +189,7 @@ def _write_text_for_debug(text_writer, raw_example, vocab2id):
       tokens.append(token)
   text_writer.write(' '.join(tokens) + '\n')
       
-def write_as_tfrecord(raw_data, vocab2id, filename, map_func, build_func):
+def write_as_tfrecord_v1(raw_data, vocab2id, filename, map_func, build_func):
   '''convert the raw data to TFRecord format and write to disk
 
   Args:
@@ -200,20 +200,21 @@ def write_as_tfrecord(raw_data, vocab2id, filename, map_func, build_func):
     build_func: function to convert Raw_Example to tf.train.SequenceExample
   '''
   writer = tf.python_io.TFRecordWriter(filename)
-  text_writer = open(filename+'.debug.txt', 'w')
+  # text_writer = open(filename+'.debug.txt', 'w')
   pad_id = vocab2id[PAD_WORD]
   
   for raw_example in raw_data:
     raw_example = raw_example._asdict()
 
-    _write_text_for_debug(text_writer, raw_example, vocab2id)
+    # _write_text_for_debug(text_writer, raw_example, vocab2id)
 
     map_func(raw_example, vocab2id)
     example = build_func(raw_example)
     writer.write(example.SerializeToString())
   writer.close()
-  text_writer.close()
+  # text_writer.close()
   del raw_data
+
 
 def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
   '''read TFRecord file to get batch tensors for tensorflow models

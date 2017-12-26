@@ -221,7 +221,7 @@ def _build_sequence_example(raw_example):
     pos.int64_list.value.append(pos_val)
 
   return ex
-  
+
 def write_as_tfrecord(train_data, test_data, vocab2id):
   '''convert the raw data to TFRecord format and write to disk
   '''
