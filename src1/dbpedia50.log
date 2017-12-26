@@ -22,7 +22,55 @@ Epoch 18 dbpedia 11.34 0.49 0.8718 time 23.63
 Epoch 19 dbpedia 12.56 0.48 0.8466 time 23.52
 Epoch 20 dbpedia 13.71 0.47 0.8268 time 23.64
 
+$ dbpedia no mtl
 
+Epoch 0 dbpedia 7.77 0.11 0.5575 time 25.24
+Epoch 1 dbpedia 4.86 0.22 0.7259 time 33.92
+Epoch 2 dbpedia 3.36 0.34 0.7945 time 40.36
+Epoch 3 dbpedia 2.46 0.43 0.8438 time 31.02
+Epoch 4 dbpedia 1.95 0.51 0.8544 time 32.91
+Epoch 5 dbpedia 1.62 0.57 0.8636 time 33.29
+Epoch 6 dbpedia 1.43 0.61 0.8799 time 36.04
+Epoch 7 dbpedia 1.32 0.64 0.9025 time 36.98
+Epoch 8 dbpedia 1.31 0.65 0.9089 time 40.54
+Epoch 9 dbpedia 1.39 0.66 0.9146 time 37.62
+Epoch 10 dbpedia 1.57 0.65 0.9152 time 39.18
+Epoch 11 dbpedia 1.88 0.63 0.9131 time 37.35
+Epoch 12 dbpedia 2.28 0.61 0.9320 time 26.27
+Epoch 13 dbpedia 2.73 0.58 0.9376 time 35.31
+Epoch 14 dbpedia 3.17 0.56 0.9158 time 37.27
+Epoch 15 dbpedia 3.65 0.54 0.9271 time 26.57
+Epoch 16 dbpedia 4.04 0.53 0.8801 time 25.73
+Epoch 17 dbpedia 4.41 0.51 0.8819 time 26.13
+Epoch 18 dbpedia 4.64 0.51 0.8675 time 26.35
+Epoch 19 dbpedia 4.93 0.50 0.8523 time 25.93
+Epoch 20 dbpedia 5.11 0.50 0.8414 time 27.14
+Epoch 21 dbpedia 5.32 0.49 0.8085 time 28.27
+
+$ dbpedia 2 linear
+
+Epoch 0 dbpedia 13.77 0.11 0.6646 time 31.62
+Epoch 1 dbpedia 7.76 0.24 0.7701 time 38.05
+Epoch 2 dbpedia 5.17 0.36 0.8179 time 34.70
+Epoch 3 dbpedia 3.78 0.45 0.8691 time 33.66
+Epoch 4 dbpedia 3.04 0.53 0.8697 time 36.79
+Epoch 5 dbpedia 2.49 0.58 0.8860 time 34.46
+Epoch 6 dbpedia 2.27 0.62 0.8924 time 37.02
+Epoch 7 dbpedia 2.12 0.64 0.9118 time 33.70
+Epoch 8 dbpedia 2.09 0.66 0.9121 time 37.63
+Epoch 9 dbpedia 2.21 0.67 0.9292 time 41.66
+Epoch 10 dbpedia 2.47 0.67 0.9221 time 37.11
+Epoch 11 dbpedia 3.04 0.65 0.9227 time 31.28
+Epoch 12 dbpedia 3.76 0.63 0.9213 time 33.06
+Epoch 13 dbpedia 4.70 0.60 0.9151 time 31.29
+Epoch 14 dbpedia 5.78 0.58 0.9369 time 30.81
+Epoch 15 dbpedia 7.00 0.55 0.9106 time 36.06
+Epoch 16 dbpedia 8.21 0.54 0.8982 time 31.83
+Epoch 17 dbpedia 9.65 0.51 0.8795 time 32.40
+Epoch 18 dbpedia 10.71 0.50 0.8561 time 33.05
+Epoch 19 dbpedia 12.09 0.48 0.9087 time 32.74
+Epoch 20 dbpedia 13.19 0.47 0.8788 time 33.28
+Epoch 21 dbpedia 14.45 0.46 0.8754 time 32.52
 
 
 $ dbpedia + semeval

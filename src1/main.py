@@ -46,8 +46,8 @@ def build_data():
 
     print('convert semeval data to TFRecord')
     semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
-    # print('convert dbpedia data to TFRecord')
-    # dbpedia.write_as_tfrecord(dbpedia_train, dbpedia_test, vocab2id)
+    print('convert dbpedia data to TFRecord')
+    dbpedia.write_as_tfrecord(dbpedia_train, dbpedia_test, vocab2id)
 
   def _trim_embed():
     print('trimming pretrained embeddings')
@@ -55,15 +55,15 @@ def build_data():
     util.trim_embeddings(300)
 
   print('load raw data')
-  dbpedia_train, dbpedia_test = None, None
-  # dbpedia_train, dbpedia_test = dbpedia.load_raw_data(verbose=False)
+  # dbpedia_train, dbpedia_test = None, None
+  dbpedia_train, dbpedia_test = dbpedia.load_raw_data(verbose=False)
   semeval_train, semeval_test = semeval.load_raw_data(verbose=False)
 
-  # _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
+  _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
 
   _build_data(dbpedia_train, dbpedia_test, semeval_train, semeval_test)
 
-  # _trim_embed()
+  _trim_embed()
   
 def trace_runtime(sess, m_train):
   '''
