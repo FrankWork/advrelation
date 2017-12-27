@@ -105,7 +105,7 @@ class MTLModel(BaseModel):
     conv_out = conv_layer(sent_pos)
     conv_out = max_pool(conv_out, MAX_LEN)
 
-    shared_out = self.shared_conv(sentence)
+    shared_out = self.shared_conv(sent_pos)
     shared_out = max_pool(shared_out, MAX_LEN)
   
     if self.is_mtl:
@@ -130,7 +130,7 @@ class MTLModel(BaseModel):
     loss_diff = self.diff_loss(shared_out, conv_out)
 
     if self.is_adv:
-      loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2) #+ loss_diff
+      loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2) + loss_diff
     else:
       loss = loss_ce  + FLAGS.l2_coef*loss_l2
 
@@ -141,32 +141,38 @@ class MTLModel(BaseModel):
     self.tensors.append((acc, loss, pred))
 
   def build_dbpedia_graph(self, data):
-    labels, entity, sentence = data
+    lexical, labels, sentence, pos1, pos2 = data
+
+    # embedding lookup
+    lexical = tf.nn.embedding_lookup(self.word_embed, lexical)
+    lexical = tf.reshape(lexical, [-1, 6*self.word_dim])
 
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
-    entity = tf.nn.embedding_lookup(self.word_embed, entity)
-    entity = tf.reshape(entity, [-1, 3*self.word_dim])
+    pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
+    pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
+    # cnn model
     if self.is_train:
       sentence = tf.nn.dropout(sentence, FLAGS.keep_prob)
+    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
     
     conv_layer = ConvLayer('conv_dbpedia', FILTER_SIZES)
-    conv_out = conv_layer(sentence)
+    conv_out = conv_layer(sent_pos)
     conv_out = max_pool(conv_out, MAX_LEN)
 
-    shared_out = self.shared_conv(sentence)
+    shared_out = self.shared_conv(sent_pos)
     shared_out = max_pool(shared_out, MAX_LEN)
-
+  
     if self.is_mtl:
-      feature = tf.concat([entity, conv_out, shared_out], axis=1)
+      feature = tf.concat([lexical, conv_out, shared_out], axis=1)
     else:
-      feature = tf.concat([entity, conv_out], axis=1)
+      feature = tf.concat([lexical, conv_out], axis=1)
 
     if self.is_train:
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
-    # Map the features to 14 classes
-    linear = LinearLayer('linear_dbpedia', CLASS_NUM, True)
+    # Map the features to 19 classes
+    linear = LinearLayer('linear_semeval', CLASS_NUM, True)
     logits, loss_l2 = linear(feature)
 
     xentropy = tf.nn.softmax_cross_entropy_with_logits(
@@ -174,14 +180,14 @@ class MTLModel(BaseModel):
                                   logits=logits)
     loss_ce = tf.reduce_mean(xentropy)
 
-    task_label = tf.one_hot(tf.zeros_like(labels), 2)
+    task_label = tf.one_hot(tf.ones_like(labels), 2)
     loss_adv, loss_adv_l2 = self.adversarial_loss(shared_out, task_label)
     loss_diff = self.diff_loss(shared_out, conv_out)
 
     if self.is_adv:
       loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2) + loss_diff
     else:
-      loss = loss_ce + FLAGS.l2_coef*loss_l2
+      loss = loss_ce  + FLAGS.l2_coef*loss_l2
 
     pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)

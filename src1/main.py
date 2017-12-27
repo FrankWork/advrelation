@@ -59,7 +59,7 @@ def build_data():
   dbpedia_train, dbpedia_test = dbpedia.load_raw_data(verbose=False)
   semeval_train, semeval_test = semeval.load_raw_data(verbose=False)
 
-  _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
+  # _build_vocab(dbpedia_train + dbpedia_test, semeval_train + semeval_test)
 
   _build_data(dbpedia_train, dbpedia_test, semeval_train, semeval_test)
 

@@ -165,18 +165,6 @@ def _lexical_feature(raw_example):
   return lexical
 
 def _position_feature(raw_example):
-  def distance(n):
-    '''convert relative distance to positive number
-    -60), [-60, 60], (60
-    '''
-    # FIXME: FLAGS.pos_num
-    if n < -60:
-      return 0
-    elif n >= -60 and n <= 60:
-      return n + 61
-    
-    return 122
-
   e1_idx = raw_example['entity1'].first
   e2_idx = raw_example['entity2'].first
 
@@ -184,8 +172,8 @@ def _position_feature(raw_example):
   position2 = []
   length = len(raw_example['sentence'])
   for i in range(length):
-    position1.append(distance(i-e1_idx))
-    position2.append(distance(i-e2_idx))
+    position1.append(util.relative_distance(i-e1_idx))
+    position2.append(util.relative_distance(i-e2_idx))
   
   return position1, position2
 
@@ -205,8 +193,8 @@ def _build_sequence_example(raw_example):
   lexical = _lexical_feature(raw_example)
   ex.context.feature['lexical'].int64_list.value.extend(lexical)
 
-  rid = raw_example['label']
-  ex.context.feature['rid'].int64_list.value.append(rid)
+  label = raw_example['label']
+  ex.context.feature['label'].int64_list.value.append(label)
 
   for word_id in raw_example['sentence']:
     word = ex.feature_lists.feature_list['sentence'].feature.add()
@@ -240,12 +228,12 @@ def write_as_tfrecord(train_data, test_data, vocab2id):
 
 def _parse_tfexample(serialized_example):
   '''parse serialized tf.train.SequenceExample to tensors
-  context features : lexical, rid
+  context features : lexical, label
   sequence features: sentence, position1, position2
   '''
   context_features={
                       'lexical'   : tf.FixedLenFeature([6], tf.int64),
-                      'rid'    : tf.FixedLenFeature([], tf.int64)}
+                      'label'    : tf.FixedLenFeature([], tf.int64)}
   sequence_features={
                       'sentence' : tf.FixedLenSequenceFeature([], tf.int64),
                       'position1'  : tf.FixedLenSequenceFeature([], tf.int64),
@@ -260,9 +248,9 @@ def _parse_tfexample(serialized_example):
   position2 = sequence_dict['position2']
 
   lexical = context_dict['lexical']
-  rid = context_dict['rid']
+  label = context_dict['label']
 
-  return lexical, rid, sentence, position1, position2
+  return lexical, label, sentence, position1, position2
 
 def read_tfrecord(epoch, batch_size):
   train_data = util.read_tfrecord(FLAGS.semeval_train_record, 

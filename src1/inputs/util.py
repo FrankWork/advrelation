@@ -157,6 +157,17 @@ def map_tokens_to_ids(tokens, token2id):
       ids.append(tok_id)
   return ids
 
+def relative_distance(n):
+  '''convert relative distance to positive number
+  -60), [-60, 60], (60
+  '''
+  if n < -60:
+    return 0
+  elif n >= -60 and n <= 60:
+    return n + 61
+  
+  return 122
+
 def pad_or_truncate(tokens, max_len, pad_val=PAD_WORD):
   '''pad or truncate a list of tokens to max_len
   Args:
@@ -189,7 +200,7 @@ def _write_text_for_debug(text_writer, raw_example, vocab2id):
       tokens.append(token)
   text_writer.write(' '.join(tokens) + '\n')
       
-def write_as_tfrecord_v1(raw_data, vocab2id, filename, map_func, build_func):
+def write_as_tfrecord(raw_data, vocab2id, filename, map_func, build_func):
   '''convert the raw data to TFRecord format and write to disk
 
   Args:
@@ -214,7 +225,6 @@ def write_as_tfrecord_v1(raw_data, vocab2id, filename, map_func, build_func):
   writer.close()
   # text_writer.close()
   del raw_data
-
 
 def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
   '''read TFRecord file to get batch tensors for tensorflow models
