@@ -43,6 +43,7 @@ def wordpunct_tokenizer(line):
   'm, 's, 'll, 've, 're, 'd, n't, words, punctuations
   '''
   # replace html tags, <br /> in imdb text
+  line = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", line)
   line = re.sub(r'<[^>]*>', ' ', line)
   line = re.sub(r"n't", " n't", line)
   return regexp.findall(line)
@@ -55,12 +56,12 @@ def write_vocab(vocab, vocab_file=FLAGS.vocab_file):
   '''write vocab to the file
   
   Args:
-    vocab: a set of tokens
+    vocab: a list of tokens
     vocab_file: filename of the file
   '''
   with open(vocab_file, 'w') as f:
     f.write('%s\n' % PAD_WORD) # make sure the pad id is 0
-    for w in sorted(list(vocab)):
+    for w in vocab:
       f.write('%s\n' % w)
 
 def _load_vocab(vocab_file):
@@ -168,7 +169,7 @@ def relative_distance(n):
   
   return 122
 
-def pad_or_truncate(tokens, max_len, pad_val=PAD_WORD):
+def pad_or_truncate(tokens, max_len, pad_val=0):
   '''pad or truncate a list of tokens to max_len
   Args:
     tokens: list, [token0, token1, .. ]

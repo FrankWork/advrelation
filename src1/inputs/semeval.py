@@ -117,11 +117,25 @@ def load_raw_data(verbose=False):
 
 def build_vocab(raw_data):
   '''collect words in sentence'''
-  vocab = set()
-  for example in raw_data:
-    for w in example.sentence:
-        vocab.add(w)
+  vocab_freqs = defaultdict(int)
 
+  for example in raw_data:
+    tokens = example.sentence
+    for token in tokens:
+      vocab_freqs[token] += 1
+  
+  # Filter out low-occurring terms
+  vocab_freqs = dict((term, freq) for term, freq in vocab_freqs.items())
+                      # if vocab_freqs[term] > 1)
+
+  # Sort by frequency
+  ordered_vocab_freqs = sorted(
+      vocab_freqs.items(), key=lambda item: item[1], reverse=True)
+
+  # Limit vocab size
+  # ordered_vocab_freqs = ordered_vocab_freqs[:MAX_VOCAB_SIZE]
+
+  vocab = [token for token, _ in ordered_vocab_freqs]
   util.write_vocab(vocab, FLAGS.semeval_vocab_file)
   return vocab
 
@@ -131,8 +145,8 @@ def _map_tokens_and_pad(raw_example, vocab2id):
     raw_example: type Raw_Example._asdict()
     vocab2id: dict<token, id>
   '''
-  sentence = util.pad_or_truncate(raw_example['sentence'], FLAGS.semeval_max_len)
-  raw_example['sentence'] = util.map_tokens_to_ids(sentence, vocab2id)
+  sentence = util.map_tokens_to_ids(raw_example['sentence'], vocab2id)
+  raw_example['sentence'] = util.pad_or_truncate(sentence, FLAGS.semeval_max_len)
 
 def _lexical_feature(raw_example):
   def _entity_context(e_idx, sent):

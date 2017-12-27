@@ -96,10 +96,10 @@ class MTLModel(BaseModel):
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
+    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
     # cnn model
     if self.is_train:
-      sentence = tf.nn.dropout(sentence, FLAGS.keep_prob)
-    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
+      sent_pos = tf.nn.dropout(sent_pos, FLAGS.keep_prob)
     
     conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
     conv_out = conv_layer(sent_pos)
@@ -151,11 +151,11 @@ class MTLModel(BaseModel):
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
-    # cnn model
-    if self.is_train:
-      sentence = tf.nn.dropout(sentence, FLAGS.keep_prob)
     sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
-    
+    if self.is_train:
+      sent_pos = tf.nn.dropout(sent_pos, FLAGS.keep_prob)
+
+    # cnn model
     conv_layer = ConvLayer('conv_dbpedia', FILTER_SIZES)
     conv_out = conv_layer(sent_pos)
     conv_out = max_pool(conv_out, MAX_LEN)
@@ -185,9 +185,9 @@ class MTLModel(BaseModel):
     loss_diff = self.diff_loss(shared_out, conv_out)
 
     if self.is_adv:
-      loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2) + loss_diff
+      loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2 + loss_adv_l2) + loss_diff
     else:
-      loss = loss_ce  + FLAGS.l2_coef*loss_l2
+      loss = loss_ce + FLAGS.l2_coef*loss_l2
 
     pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)

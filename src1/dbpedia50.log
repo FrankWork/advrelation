@@ -47,6 +47,27 @@ Epoch 19 dbpedia 4.93 0.50 0.8523 time 25.93
 Epoch 20 dbpedia 5.11 0.50 0.8414 time 27.14
 Epoch 21 dbpedia 5.32 0.49 0.8085 time 28.27
 
+$ dbpedia mtl pos
+
+Epoch 0 dbpedia 11.35 0.13 0.6322 time 35.10
+Epoch 1 dbpedia 6.91 0.27 0.7804 time 43.46
+Epoch 2 dbpedia 4.87 0.39 0.8396 time 50.92
+Epoch 3 dbpedia 3.79 0.48 0.8493 time 50.17
+Epoch 4 dbpedia 3.04 0.55 0.8743 time 40.76
+Epoch 5 dbpedia 2.64 0.60 0.8759 time 43.15
+Epoch 6 dbpedia 2.36 0.63 0.8827 time 45.76
+Epoch 7 dbpedia 2.28 0.65 0.9007 time 42.78
+Epoch 8 dbpedia 2.34 0.67 0.9124 time 45.79
+Epoch 9 dbpedia 2.57 0.67 0.9070 time 42.19
+Epoch 10 dbpedia 3.04 0.65 0.9268 time 35.77
+Epoch 11 dbpedia 3.85 0.62 0.9293 time 51.87
+Epoch 12 dbpedia 4.93 0.59 0.9404 time 47.68
+Epoch 13 dbpedia 6.17 0.57 0.9206 time 53.26
+Epoch 14 dbpedia 7.63 0.54 0.9402 time 39.16
+Epoch 15 dbpedia 9.12 0.52 0.9444 time 39.72
+Epoch 16 dbpedia 10.65 0.50 0.9203 time 52.23
+Epoch 17 dbpedia 12.32 0.49 0.8901 time 41.97
+
 $ dbpedia 2 linear
 
 Epoch 0 dbpedia 13.77 0.11 0.6646 time 31.62

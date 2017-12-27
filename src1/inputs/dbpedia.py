@@ -78,13 +78,25 @@ def load_raw_data(verbose=False):
 
 def build_vocab(raw_data):
   '''collect words in sentence'''
-  vocab = set()
+  vocab_freqs = defaultdict(int)
+
   for example in raw_data:
-    for w in example.sentence:
-      vocab.add(w)
-    for w in example.entity:
-      vocab.add(w)
+    tokens = example.sentence + example.entity
+    for token in tokens:
+      vocab_freqs[token] += 1
   
+  # Filter out low-occurring terms
+  vocab_freqs = dict((term, freq) for term, freq in vocab_freqs.items()
+                      if vocab_freqs[term] > 5)
+
+  # Sort by frequency
+  ordered_vocab_freqs = sorted(
+      vocab_freqs.items(), key=lambda item: item[1], reverse=True)
+
+  # Limit vocab size
+  # ordered_vocab_freqs = ordered_vocab_freqs[:MAX_VOCAB_SIZE]
+
+  vocab = [token for token, _ in ordered_vocab_freqs]
   util.write_vocab(vocab, DBPEDIA_VOCAB_FILE)
   return vocab
 
@@ -96,8 +108,8 @@ def _map_tokens_and_pad(raw_example, vocab2id):
   '''
   raw_example['entity'] = util.map_tokens_to_ids(raw_example['entity'], vocab2id)
 
-  sentence = util.pad_or_truncate(raw_example['sentence'], DBPEDIA_MAX_LEN)
-  raw_example['sentence'] = util.map_tokens_to_ids(sentence, vocab2id)
+  sentence = util.map_tokens_to_ids(raw_example['sentence'], vocab2id)
+  raw_example['sentence'] = util.pad_or_truncate(sentence, DBPEDIA_MAX_LEN)
 
 def _lexical_feature(raw_example):
   def _entity_context(e_idx, sent):
