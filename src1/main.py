@@ -201,13 +201,27 @@ def train_dbpedia(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
 
-def test(sess, m_valid):
+def test(sess, m_valid, semeval_test_iter):
   m_valid.restore(sess)
-  fetches = [m_valid.semeval_accuracy, m_valid.semeval_pred]
-  accuracy, predictions = sess.run(fetches)
-  print('accuracy: %.4f' % accuracy)
-  
-  semeval.write_results(predictions)
+  sess.run([semeval_test_iter.initializer])
+  acc_tenser, _, pred_tensor = m_valid.tensors[1]
+
+  acc_all = 0.
+  pred_all = []
+  for batch in range(28):
+    acc, pred = sess.run([acc_tenser, pred_tensor])
+    acc_all += acc
+    pred_all.append(pred)
+  acc_all /= 28
+
+  print('acc: %.4f' % acc_all)
+  # print(type(pred_all[0]))
+  # print(pred_all[0].shape)
+  pred_all = np.concatenate(pred_all)
+  # print(type(pred_all))
+  # print(pred_all.shape)
+  # exit()
+  semeval.write_results(pred_all)
 
 def main(_):
   if FLAGS.build_data:
@@ -241,7 +255,7 @@ def main(_):
       print('='*80)
 
       if FLAGS.test:
-        test(sess, m_valid)
+        test(sess, m_valid, semeval_test_iter)
       else:
         # train_dbpedia(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter)
         train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter)

@@ -213,7 +213,7 @@ def build_train_valid_model(model_name, word_embed,
                             dbpedia_train, dbpedia_test, is_mtl, is_adv):
   with tf.name_scope("Train"):
     with tf.variable_scope('MTLModel', reuse=None):
-      m_train = MTLModel(word_embed, semeval_train, dbpedia_train, is_mtl, is_adv, is_train=True)
+      m_train = MTLModel(word_embed, semeval_train, dbpedia_train, is_mtl, is_adv, is_train=False)
       m_train.set_saver(model_name)
       m_train.build_train_op()
   with tf.name_scope('Valid'):

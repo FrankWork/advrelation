@@ -286,5 +286,6 @@ def write_results(predictions):
   start_no = 8001
   with open(FLAGS.results_file, 'w') as f:
     for idx, id in enumerate(predictions):
-      rel = id2relations[id]
-      f.write('%d\t%s\n' % (start_no+idx, rel))
+      if idx < 2717:
+        rel = id2relations[id]
+        f.write('%d\t%s\n' % (start_no+idx, rel))
