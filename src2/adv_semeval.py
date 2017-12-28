@@ -13,10 +13,11 @@ from tensor2tensor.utils import registry
 # datasets
 LOCATION_OF_DATA = "data/SemEval/"
 
-TRAIN_DATASETS = [ os.path.join(LOCATION_OF_DATA, 'train.txt')]
-TEST_DATASETS = [ os.path.join(LOCATION_OF_DATA, 'test.txt')]
+TRAIN_DATASETS = os.path.join(LOCATION_OF_DATA, 'train.txt')
+TEST_DATASETS =  os.path.join(LOCATION_OF_DATA, 'test.txt')
 
 class RawDataGenerator(object):
+  '''Load text from file'''
   def __init__(self):
     self.entity_finder = re.compile(r"<e[12]>(.*?)</e[12]>")
     self.entity_tag_mask = re.compile(r"</?e[12]>")
@@ -28,52 +29,37 @@ class RawDataGenerator(object):
       sentence: a list of tokens
     '''
     n = len(entity)
-    for i in range(len(tokens)):
-      if tokens[i:i+n]==entity:
+    for i in range(len(sentence)):
+      if sentence[i:i+n]==entity:
         # first, last = i, i+n-1
         return i
     return -1
 
-  def _load_raw_data(filename, relation2id):
+  def generator(self, data_file, for_vocab=False):
     '''load raw data from text file, 
     file contents:
       1	"The ... an arrayed <e1>configuration</e1> of antenna <e2>elements</e2>."
       Component-Whole(e2,e1)
       Comment: Not a collection: there is structure here, organisation.
 
-      2	"The <e1>child</e1> ... the <e2>cradle</e2> by means of a cord."
-      Other
-      Comment:
-
       EOF
-
-    return: a list of Raw_Example
     '''
-    data = []
-    lines = open(filename).readlines()
+    lines = open(data_file).readlines()
     n = len(lines)
     assert n % 4 == 0
     for i in range(n//4):
-      sentence = lines[4*i].split('\t')[1].strip('"|\n').lower()
+      text = lines[4*i].split('\t')[1].strip('"|\n')
+      sentence = self.entity_tag_mask.sub(' ', text)
       
-      entities = _entity_regex.findall(sentence)
-      assert len(entities) == 2
+      if for_vocab:
+        yield sentence
+      else:
+        entities = self.entity_finder.findall(text)
+        assert len(entities) == 2
 
-      sentence = _etag_mask.sub(' ', sentence)
-      tokens = util.wordpunct_tokenizer(sentence)
+        label = lines[4*i+1].strip()
 
-      entities = [util.wordpunct_tokenizer(entity) for entity in entities]
-      entity1 = _find_entity_pos(entities[0], tokens)
-      entity2 = _find_entity_pos(entities[1], tokens)
-      assert entity1 is not None and entity2 is not None
-
-      rel_text = lines[4*i+1].strip()
-      label = relation2id[rel_text]
-
-      example = Raw_Example(label, entity1, entity2, tokens)
-      data.append(example)
-
-    return data
+        yield label, entities, sentence
 
 
 @registry.register_problem()
@@ -88,35 +74,26 @@ class AdvSemEval(problem.Problem):
   
   @property
   def targeted_vocab_size(self):
-    raise 2**13 # 8k, 22k
-
-  def doc_generator(self, imdb_dir, dataset, include_label=False):
-    dirs = [(os.path.join(imdb_dir, dataset, "pos"), True), (os.path.join(
-        imdb_dir, dataset, "neg"), False)]
-
-    for d, label in dirs:
-      for filename in os.listdir(d):
-        with tf.gfile.Open(os.path.join(d, filename)) as imdb_f:
-          doc = imdb_f.read().strip()
-          if include_label:
-            yield doc, label
-          else:
-            yield doc
- 
-
+    return 2**13 # 8k, 22k
 
   def generator(self, data_dir, tmp_dir, train):
     """Generate examples."""
+    data_file = TRAIN_DATASETS if train else TEST_DATASETS
+
     # Generate vocab
-    encoder = generator_utils.get_or_generate_vocab_inner(
+    raw_gen = RawDataGenerator()
+    
+    text_encoder = generator_utils.get_or_generate_vocab_inner(
         data_dir, self.vocab_file, self.targeted_vocab_size,
-        self.doc_generator(imdb_dir, "train"))
+        raw_gen.generator(data_file, for_vocab=True))
 
     # Generate examples
-    dataset = "train" if train else "test"
-    for doc, label in self.doc_generator(imdb_dir, dataset, include_label=True):
+    for label, entities, sentence in raw_gen.generator(data_file):
+      entities = [text_encoder.encode(e) for e in entities]
+      sentence = text_encoder.encode(sentence)
+      raw_gen.find_start_position()
       yield {
-          "inputs": encoder.encode(doc) + [EOS],
+          "inputs": text_encoder.encode(doc) + [EOS],
           "targets": [int(label)],
       }
 
