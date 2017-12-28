@@ -85,32 +85,22 @@ def trace_runtime(sess, m_train):
   trace_file.write(trace.generate_chrome_trace_format())
   trace_file.close()
 
-def train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
+def train_semeval(sess, m_train, m_valid, semeval_test_iter):
   best_acc, best_epoch = 0., 0
   start_time = time.time()
   orig_begin_time = start_time
 
   for epoch in range(FLAGS.num_epochs):
-    sess.run([semeval_test_iter.initializer, dbpedia_test_iter.initializer])
+    sess.run([semeval_test_iter.initializer])
 
     # train dbpedia and SemEval
-    dbpedia_loss, dbpedia_acc = 0., 0.
     sem_loss, sem_acc = 0., 0.
     for batch in range(80):
-      acc, loss,_ = m_train.tensors[0]
-      train_op = m_train.train_ops[0]
-      _, loss, acc = sess.run([train_op, loss, acc])
-      dbpedia_loss += loss
-      dbpedia_acc += acc
-      
       acc, loss,_ = m_train.tensors[1]
       train_op = m_train.train_ops[1]
       _, loss, acc = sess.run([train_op, loss, acc])
       sem_loss += loss
       sem_acc += acc
-      
-    dbpedia_loss /= 80
-    dbpedia_acc /= 80
 
     sem_loss /= 80
     sem_acc /= 80
@@ -122,30 +112,19 @@ def train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
 
     # valid accuracy
     sem_valid_acc = 0.
-    dbpedia_valid_acc = 0.
     for batch in range(28):
-    # while True:
-    #   try:
-      acc_tenser, _, _  = m_valid.tensors[0]
-      acc = sess.run(acc_tenser)
-      dbpedia_valid_acc += acc
-
       acc_tenser, _, _ = m_valid.tensors[1]
       acc = sess.run(acc_tenser)
       sem_valid_acc += acc
-      # except tf.errors.OutOfRangeError:
-      #   break
     sem_valid_acc /= 28
-    dbpedia_valid_acc /= 28
 
     if best_acc < sem_valid_acc:
       best_acc = sem_valid_acc
       best_epoch = epoch
       m_train.save(sess, epoch)
     
-    print("Epoch %d dbpedia %.2f %.2f %.4f sem %.2f %.2f %.4f time %.2f" % 
-             (epoch, dbpedia_loss, dbpedia_acc, dbpedia_valid_acc, 
-                      sem_loss, sem_acc, sem_valid_acc, duration))
+    print("Epoch %d sem %.2f %.2f %.4f time %.2f" % 
+             (epoch, sem_loss, sem_acc, sem_valid_acc, duration))
     sys.stdout.flush()
   
   duration = time.time() - orig_begin_time
@@ -154,12 +133,12 @@ def train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
 
-def train_dbpedia(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter):
+def train_dbpedia(sess, m_train, m_valid, dbpedia_test_iter):
   best_acc, best_epoch = 0., 0
   start_time = time.time()
   orig_begin_time = start_time
 
-  for epoch in range(FLAGS.num_epochs):
+  for epoch in range(30):
     sess.run(dbpedia_test_iter.initializer)
     dbpedia_loss, dbpedia_acc = 0., 0.
 
@@ -243,7 +222,8 @@ def main(_):
                                           model_name, word_embed, 
                                           semeval_train, semeval_test, 
                                           dbpedia_train, dbpedia_test, 
-                                          FLAGS.is_mtl, FLAGS.is_adv)
+                                          FLAGS.is_mtl, FLAGS.is_adv,
+                                          FLAGS.test)
     
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
@@ -257,8 +237,8 @@ def main(_):
       if FLAGS.test:
         test(sess, m_valid, semeval_test_iter)
       else:
-        # train_dbpedia(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter)
-        train(sess, m_train, m_valid, semeval_test_iter, dbpedia_test_iter)
+        # train_dbpedia(sess, m_train, m_valid, dbpedia_test_iter)
+        train_semeval(sess, m_train, m_valid, semeval_test_iter)
 
 if __name__ == '__main__':
   tf.app.run()

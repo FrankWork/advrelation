@@ -99,3 +99,8 @@ Epoch 48 dbpedia 1.01 0.76 0.8789 sem 0.66 0.85 0.7754 time 10.81
 Epoch 49 dbpedia 0.99 0.77 0.8714 sem 0.65 0.84 0.7782 time 10.16
 Done training, best_epoch: 43, best_acc: 0.7839
 duration: 0.30 hours
+
+0.7911 semeval
+0.7925 dbpedia + semeval mtl + adv
+0.7943 dbpedia + semeval mtl
+0.7950 dbpedia + semeval

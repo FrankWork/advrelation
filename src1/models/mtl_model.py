@@ -13,7 +13,7 @@ FLAGS = flags.FLAGS
 MAX_LEN = 97
 SEM_CLASS_NUM = 19
 DB_CLASS_NUM = 14
-CLASS_NUM = SEM_CLASS_NUM + DB_CLASS_NUM
+# CLASS_NUM = SEM_CLASS_NUM + DB_CLASS_NUM
 TASK_NUM = 2
 
 class MTLModel(BaseModel):
@@ -38,7 +38,7 @@ class MTLModel(BaseModel):
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
     self.shared_conv = ConvLayer('conv_shared', FILTER_SIZES)
-    self.shared_linear = LinearLayer('linear_shared', TASK_NUM, True)
+    # self.shared_linear = LinearLayer('linear_shared', TASK_NUM, True)
 
     self.tensors = []
 
@@ -101,38 +101,41 @@ class MTLModel(BaseModel):
     if self.is_train:
       sent_pos = tf.nn.dropout(sent_pos, FLAGS.keep_prob)
     
-    conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
-    conv_out = conv_layer(sent_pos)
-    conv_out = max_pool(conv_out, MAX_LEN)
+    # conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
+    # conv_out = conv_layer(sent_pos)
+    # conv_out = max_pool(conv_out, MAX_LEN)
 
     shared_out = self.shared_conv(sent_pos)
     shared_out = max_pool(shared_out, MAX_LEN)
   
-    if self.is_mtl:
-      feature = tf.concat([lexical, conv_out, shared_out], axis=1)
-    else:
-      feature = tf.concat([lexical, conv_out], axis=1)
+    # if self.is_mtl:
+    #   feature = tf.concat([lexical, conv_out, shared_out], axis=1)
+    # else:
+    #   feature = tf.concat([lexical, conv_out], axis=1)
 
+    feature = tf.concat([lexical, shared_out], axis=1)
     if self.is_train:
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 19 classes
-    linear = LinearLayer('linear_semeval', CLASS_NUM, True)
+    linear = LinearLayer('linear_semeval', SEM_CLASS_NUM, True)
     logits, loss_l2 = linear(feature)
 
     xentropy = tf.nn.softmax_cross_entropy_with_logits(
-                                  labels=tf.one_hot(labels, CLASS_NUM), 
+                                  labels=tf.one_hot(labels, SEM_CLASS_NUM), 
                                   logits=logits)
     loss_ce = tf.reduce_mean(xentropy)
 
-    task_label = tf.one_hot(tf.ones_like(labels), 2)
-    loss_adv, loss_adv_l2 = self.adversarial_loss(shared_out, task_label)
-    loss_diff = self.diff_loss(shared_out, conv_out)
+    # task_label = tf.one_hot(tf.ones_like(labels), 2)
+    # loss_adv, loss_adv_l2 = self.adversarial_loss(shared_out, task_label)
+    # loss_diff = self.diff_loss(shared_out, conv_out)
 
-    if self.is_adv:
-      loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2) + loss_diff
-    else:
-      loss = loss_ce  + FLAGS.l2_coef*loss_l2
+    # if self.is_adv:
+    #   loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2+loss_adv_l2) + loss_diff
+    # else:
+    #   loss = loss_ce  + FLAGS.l2_coef*loss_l2
+
+    loss = loss_ce  + FLAGS.l2_coef*loss_l2
 
     pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)
@@ -156,38 +159,41 @@ class MTLModel(BaseModel):
       sent_pos = tf.nn.dropout(sent_pos, FLAGS.keep_prob)
 
     # cnn model
-    conv_layer = ConvLayer('conv_dbpedia', FILTER_SIZES)
-    conv_out = conv_layer(sent_pos)
-    conv_out = max_pool(conv_out, MAX_LEN)
+    # conv_layer = ConvLayer('conv_dbpedia', FILTER_SIZES)
+    # conv_out = conv_layer(sent_pos)
+    # conv_out = max_pool(conv_out, MAX_LEN)
 
     shared_out = self.shared_conv(sent_pos)
     shared_out = max_pool(shared_out, MAX_LEN)
   
-    if self.is_mtl:
-      feature = tf.concat([lexical, conv_out, shared_out], axis=1)
-    else:
-      feature = tf.concat([lexical, conv_out], axis=1)
+    # if self.is_mtl:
+    #   feature = tf.concat([lexical, conv_out, shared_out], axis=1)
+    # else:
+    #   feature = tf.concat([lexical, conv_out], axis=1)
 
+    feature = tf.concat([lexical, shared_out], axis=1)
     if self.is_train:
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 19 classes
-    linear = LinearLayer('linear_semeval', CLASS_NUM, True)
+    linear = LinearLayer('linear_semeval', DB_CLASS_NUM, True)
     logits, loss_l2 = linear(feature)
 
     xentropy = tf.nn.softmax_cross_entropy_with_logits(
-                                  labels=tf.one_hot(labels, CLASS_NUM), 
+                                  labels=tf.one_hot(labels, DB_CLASS_NUM), 
                                   logits=logits)
     loss_ce = tf.reduce_mean(xentropy)
 
-    task_label = tf.one_hot(tf.ones_like(labels), 2)
-    loss_adv, loss_adv_l2 = self.adversarial_loss(shared_out, task_label)
-    loss_diff = self.diff_loss(shared_out, conv_out)
+    # task_label = tf.one_hot(tf.ones_like(labels), 2)
+    # loss_adv, loss_adv_l2 = self.adversarial_loss(shared_out, task_label)
+    # loss_diff = self.diff_loss(shared_out, conv_out)
 
-    if self.is_adv:
-      loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2 + loss_adv_l2) + loss_diff
-    else:
-      loss = loss_ce + FLAGS.l2_coef*loss_l2
+    # if self.is_adv:
+    #   loss = loss_ce + 0.05*loss_adv + FLAGS.l2_coef*(loss_l2 + loss_adv_l2) + loss_diff
+    # else:
+    #   loss = loss_ce + FLAGS.l2_coef*loss_l2
+    
+    loss = loss_ce + FLAGS.l2_coef*loss_l2
 
     pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)
@@ -210,12 +216,14 @@ class MTLModel(BaseModel):
 
 def build_train_valid_model(model_name, word_embed, 
                             semeval_train, semeval_test, 
-                            dbpedia_train, dbpedia_test, is_mtl, is_adv):
+                            dbpedia_train, dbpedia_test, 
+                            is_mtl, is_adv, is_test):
   with tf.name_scope("Train"):
     with tf.variable_scope('MTLModel', reuse=None):
-      m_train = MTLModel(word_embed, semeval_train, dbpedia_train, is_mtl, is_adv, is_train=False)
+      m_train = MTLModel(word_embed, semeval_train, dbpedia_train, is_mtl, is_adv, is_train=True)
       m_train.set_saver(model_name)
-      m_train.build_train_op()
+      if not is_test:
+        m_train.build_train_op()
   with tf.name_scope('Valid'):
     with tf.variable_scope('MTLModel', reuse=True):
       m_valid = MTLModel(word_embed, semeval_test, dbpedia_test, is_mtl, is_adv, is_train=False)
