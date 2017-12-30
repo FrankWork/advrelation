@@ -181,7 +181,8 @@ class SemEval2010Task8(problem.Problem):
     p.input_modality = {
         "inputs": (registry.Modalities.SYMBOL, source_vocab_size)
     }
-    p.target_modality = (registry.Modalities.CLASS_LABEL, target_vocab_size)
+    # p.target_modality = (registry.Modalities.CLASS_LABEL, target_vocab_size)
+    p.target_modality = ('class_label:identity', target_vocab_size)    
     p.input_space_id = problem.SpaceID.EN_TOK
     p.target_space_id = problem.SpaceID.GENERIC
   
@@ -212,6 +213,14 @@ class SemEval2010Task8(problem.Problem):
   #   '''Called by `self.dataset` '''
   #   return super(SemEval2010Task8, self). \
   #                                 preprocess_example(example, hparams, mode)
+
+  # def input_fn(self, mode, hparams, data_dir=None, params=None, config=None,
+  #              dataset_kwargs=None):
+  #   features, target = super(SemEval2010Task8, self). \
+  #             input_fn(mode, hparams, data_dir, params, config, dataset_kwargs)
+  #   for k, v in features.items():
+  #     print(k, v.shape)
+  #   exit()
 
   def eval_metrics(self):
     return [metrics.Metrics.ACC]

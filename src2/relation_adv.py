@@ -33,9 +33,11 @@ def xception_internal(inputs, hparams):
 class RelationAdv(t2t_model.T2TModel):
 
   # def bottom(self, features):
+  #   print('in bottom:')
   #   for k, v in features.items():
   #     print(k, v.shape)
-  #   exit()
+  #   # exit()
+  #   return features
 
   def body(self, features):
     '''
@@ -44,6 +46,7 @@ class RelationAdv(t2t_model.T2TModel):
                 embedding lookup of the origin `inputs` tensor. Lookup operation
                 is done in `self.bottom`
     '''
+    print('in body')
     for k, v in features.items():
       print(k, v.shape)
     exit()
