@@ -4,6 +4,8 @@
 import os
 import re
 
+import tensorflow as tf
+
 from tensor2tensor.data_generators import problem
 from tensor2tensor.data_generators import text_encoder
 from tensor2tensor.data_generators import generator_utils
@@ -22,6 +24,7 @@ class RawDataGenerator(object):
   def __init__(self):
     self.entity_finder = re.compile(r"<e[12]>(.*?)</e[12]>")
     self.entity_tag_mask = re.compile(r"</?e[12]>")
+    self.space_mask = re.compile(r'\s{2,}')
 
   def find_start_position(self, entities, sentence):
     ''' find start position of the entity in sentence
@@ -102,7 +105,8 @@ class RawDataGenerator(object):
     for i in range(n//4):
       text = lines[4*i].split('\t')[1].strip('"|\n')
       sentence = self.entity_tag_mask.sub(' ', text)
-      
+      sentence = self.space_mask.sub(" ", sentence)
+
       if for_vocab:
         yield sentence
       else:
@@ -115,7 +119,7 @@ class RawDataGenerator(object):
 
 
 @registry.register_problem()
-class AdvSemEval(problem.Problem):
+class SemEval2010Task8(problem.Problem):
   @property
   def num_shards(self):
     return 10
@@ -150,12 +154,15 @@ class AdvSemEval(problem.Problem):
       yield {
           "inputs": sentence,
           "targets": [label_encoder.encode(label)],
-          'lexicail': raw_gen.lexical_feature(entities_pos, sentence),
+          'lexical': raw_gen.lexical_feature(entities_pos, sentence),
           'position1': raw_gen.position_feature(entities_pos[0], sentence),
           'position2': raw_gen.position_feature(entities_pos[1], sentence),
       }
 
   def generate_data(self, data_dir, tmp_dir, task_id=-1):
+    '''Generate `tf.example` data from text file, output the generated data to 
+    `data_dir`. Called by `t2t-datagen`
+    '''
     train_paths = self.training_filepaths(
         data_dir, self.num_shards, shuffled=False)
     dev_paths = self.dev_filepaths(data_dir, 1, shuffled=False)
@@ -164,30 +171,47 @@ class AdvSemEval(problem.Problem):
         self.generator(data_dir, tmp_dir, False), dev_paths)
   
   def hparams(self, defaults, unused_model_hparams):
+    '''Called by `t2t-trainer`
+    '''
     p = defaults
     source_vocab_size = self._encoders["inputs"].vocab_size
+    target_vocab_size = self._encoders["targets"].vocab_size
+
+    # tensor2tensor.layers.modalities.SymbolModality
     p.input_modality = {
         "inputs": (registry.Modalities.SYMBOL, source_vocab_size)
     }
-    p.target_modality = (registry.Modalities.CLASS_LABEL, 2)
+    p.target_modality = (registry.Modalities.CLASS_LABEL, target_vocab_size)
     p.input_space_id = problem.SpaceID.EN_TOK
     p.target_space_id = problem.SpaceID.GENERIC
   
   def feature_encoders(self, data_dir):
+    '''Used on inference, convert input and output from ids to tokens.
+    The returned results are stored in self._encoders
+    '''
     vocab_filename = os.path.join(data_dir, self.vocab_file)
     encoder = text_encoder.SubwordTextEncoder(vocab_filename)
     return {
-        "inputs": encoder,
-        "targets": text_encoder.ClassLabelEncoder(["neg", "pos"]),
+      "inputs": encoder,
+      "targets": text_encoder.ClassLabelEncoder(class_labels_fname=LABEL_FILE),
     }
   
   def example_reading_spec(self):
+    '''Called by `self.decode_example`'''
     data_fields = {
         "inputs": tf.VarLenFeature(tf.int64),
         "targets": tf.FixedLenFeature([1], tf.int64),
+        "lexical": tf.FixedLenFeature([6], tf.int64),
+        "position1": tf.VarLenFeature(tf.int64),
+        "position2": tf.VarLenFeature(tf.int64),
     }
     data_items_to_decoders = None
     return (data_fields, data_items_to_decoders)
+  
+  # def preprocess_example(self, example, mode, hparams):
+  #   '''Called by `self.dataset` '''
+  #   return super(SemEval2010Task8, self). \
+  #                                 preprocess_example(example, hparams, mode)
 
   def eval_metrics(self):
     return [metrics.Metrics.ACC]
