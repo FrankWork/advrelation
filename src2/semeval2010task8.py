@@ -190,7 +190,7 @@ class SemEval2010Task8(problem.Problem):
         "position2": ('symbol:position', None)
     }
     # p.target_modality = (registry.Modalities.CLASS_LABEL, target_vocab_size)
-    identity = (registry.Modalities.GENERIC, None)
+    identity = ("class_label:onehot", target_vocab_size)
     p.target_modality = identity
     p.input_space_id = problem.SpaceID.EN_TOK
     p.target_space_id = problem.SpaceID.GENERIC
