@@ -1,6 +1,6 @@
 ## TODO
 
-- [Tensor2Tensor](https://tensorflow.github.io/tensor2tensor/overview.html)
+- Tensor2Tensor
 
 ## Candidate Methods
 
@@ -20,6 +20,18 @@
 - src3: Fudan-MTL
 - src4: merge fudan-data into one dataset
 
+## [Tensor2Tensor](https://tensorflow.github.io/tensor2tensor/overview.html)
+
+- Data Generation
+  * t2t-datagen: `Problem.generate_data(data_dir, tmp_dir)`
+- Input Pipeline
+  * `example_reading_spec`, `Problem.dataset`, `Problem.input_fn`
+- Hparams
+  * `p.input_modality`, `p.target_modality`
+- Build Model
+  * `T2TModel.estimator_model_fn`, `model.model_fn`, 
+  * `model.bottom`, `model.body`,`model.top`, `model.loss`
+  * `model.estimator_spec_train`, `model.estimator_spec_eval`
 
 ## Reference
 

@@ -5,39 +5,98 @@ from tensor2tensor.layers import common_layers
 
 import tensorflow as tf
 
-def residual_block(x, hparams):
-  """A stack of convolution blocks with residual connection."""
-  k = (hparams.kernel_height, hparams.kernel_width)
-  dilations_and_kernels = [((1, 1), k) for _ in xrange(3)]
-  y = common_layers.subseparable_conv_block(
-      x,
-      hparams.hidden_size,
-      dilations_and_kernels,
-      padding="SAME",
-      separability=0,
-      name="residual_block")
-  x = common_layers.layer_norm(x + y, hparams.hidden_size, name="lnorm")
-  return tf.nn.dropout(x, 1.0 - hparams.dropout)
 
+class ConvLayer(tf.layers.Layer):
+  '''inherit tf.layers.Layer to cache trainable variables
+  '''
+  def __init__(self, layer_name, filter_sizes=[3,4,5], num_filters=100, **kwargs):
+    self.layer_name = layer_name
+    self.filter_sizes = filter_sizes
+    self.num_filters = num_filters
+    self.conv = {} # trainable variables for conv
+    super(ConvLayer, self).__init__(**kwargs)
+  
+  def build(self, input_shape):
+    input_dim = input_shape[2]
 
-def xception_internal(inputs, hparams):
-  """Xception body."""
-  with tf.variable_scope("xception"):
-    cur = inputs
-    for i in xrange(hparams.num_hidden_layers):
-      with tf.variable_scope("layer_%d" % i):
-        cur = residual_block(cur, hparams)
-    return cur
+    with tf.variable_scope(self.layer_name):
+      w_init = tf.truncated_normal_initializer(stddev=0.1)
+      b_init = tf.constant_initializer(0.1)
+
+      for fsize in self.filter_sizes:
+        w_shape = [fsize, input_dim, 1, self.num_filters]
+        b_shape = [self.num_filters]
+        w_name = 'conv-W%d' % fsize
+        b_name = 'conv-b%d' % fsize
+        self.conv[w_name] = self.add_variable(
+                                           w_name, w_shape, initializer=w_init)
+        self.conv[b_name] = self.add_variable(
+                                           b_name, b_shape, initializer=b_init)
+    
+      super(ConvLayer, self).build(input_shape)
+
+  def call(self, x):
+    x = tf.expand_dims(x, axis=-1)
+    input_dim = x.shape.as_list()[2]
+    conv_outs = []
+    for fsize in self.filter_sizes:
+      w_name = 'conv-W%d' % fsize
+      b_name = 'conv-b%d' % fsize
+      
+      conv = tf.nn.conv2d(x,
+                        self.conv[w_name],
+                        strides=[1, 1, input_dim, 1],
+                        padding='SAME')
+      conv = tf.nn.relu(conv + self.conv[b_name]) # batch,max_len,1,filters
+      conv_outs.append(conv)
+    return conv_outs
+
+def max_pool(conv_outs, max_len, num_filters=100):
+  pool_outs = []
+
+  for conv in conv_outs:
+    pool = tf.nn.max_pool(conv, 
+                        ksize= [1, max_len, 1, 1], 
+                        strides=[1, max_len, 1, 1], 
+                        padding='SAME') # batch,1,1,filters
+    pool_outs.append(pool)
+    
+  n = len(conv_outs)
+  pools = tf.reshape(tf.concat(pool_outs, 3), [-1, n*num_filters])
+
+  return pools
+
+class LinearLayer(tf.layers.Layer):
+  '''inherit tf.layers.Layer to cache trainable variables
+  '''
+  def __init__(self, layer_name, out_size, is_regularize, **kwargs):
+    self.layer_name = layer_name
+    self.out_size = out_size
+    self.is_regularize = is_regularize
+    super(LinearLayer, self).__init__(**kwargs)
+  
+  def build(self, input_shape):
+    in_size = input_shape[1]
+
+    with tf.variable_scope(self.layer_name):
+      w_init = tf.truncated_normal_initializer(stddev=0.1)
+      b_init = tf.constant_initializer(0.1)
+
+      self.w = self.add_variable('W', [in_size, self.out_size], initializer=w_init)
+      self.b = self.add_variable('b', [self.out_size], initializer=b_init)
+
+      super(LinearLayer, self).build(input_shape)
+
+  def call(self, x):
+    loss_l2 = tf.constant(0, dtype=tf.float32)
+    o = tf.nn.xw_plus_b(x, self.w, self.b)
+    if self.is_regularize:
+        loss_l2 += tf.nn.l2_loss(self.w) + tf.nn.l2_loss(self.b)
+    return o, loss_l2
+
 
 @registry.register_model
 class RelationAdv(t2t_model.T2TModel):
-
-  # def bottom(self, features):
-  #   print('in bottom:')
-  #   for k, v in features.items():
-  #     print(k, v.shape)
-  #   # exit()
-  #   return features
 
   def body(self, features):
     '''
@@ -46,17 +105,33 @@ class RelationAdv(t2t_model.T2TModel):
                 embedding lookup of the origin `inputs` tensor. Lookup operation
                 is done in `self.bottom`
     '''
-    print('in body')
-    for k, v in features.items():
-      print(k, v.shape)
-    exit()
-    # return 'hello world'
+    is_training = self._hparams.mode == tf.estimator.ModeKeys.TRAIN
+    keep_prob = 1.0-self._hparams.dropout
+
+    inputs = common_layers.flatten4d3d(features['inputs'])
+    concat1 = tf.concat([inputs, features['position1'], features['position2']], 
+                       axis=-1)
+    if is_training:
+      concat1 = tf.nn.dropout(concat1, keep_prob)
+
+    conv_layer = ConvLayer('conv1')
+    conv_out = conv_layer(concat1)
+    conv_out = max_pool(conv_out, self._hparams.max_input_seq_length)
+    
+    lexical = tf.reshape(features['lexical'], [-1, 6*self._hparams.hidden_size])
+    concat2 = tf.concat([conv_out, lexical], axis=1)
+    if is_training:
+      concat2 = tf.nn.dropout(concat2, keep_prob)
+
+    return concat2
+    # linear = LinearLayer('linear1', SEM_CLASS_NUM, True)
+    # logits, loss_l2 = linear(feature)
 
 @registry.register_hparams
 def relation_adv_base():
   """Set of hyperparameters."""
   hparams = common_hparams.basic_params1()
-  hparams.max_input_seq_length = 0
+  hparams.max_input_seq_length = 97
   hparams.batch_size = 100
   hparams.hidden_size = 50 # word embedding dim
   hparams.dropout = 0.2

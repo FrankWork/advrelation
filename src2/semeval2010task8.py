@@ -19,6 +19,9 @@ TRAIN_DATASETS = os.path.join(LOCATION_OF_DATA, 'train.txt')
 TEST_DATASETS =  os.path.join(LOCATION_OF_DATA, 'test.txt')
 LABEL_FILE = os.path.join(LOCATION_OF_DATA, 'relations.txt')
 
+POSITION_NUM = 123
+POSITION_DIM = 5
+
 class RawDataGenerator(object):
   '''Load text from file'''
   def __init__(self):
@@ -178,11 +181,17 @@ class SemEval2010Task8(problem.Problem):
     target_vocab_size = self._encoders["targets"].vocab_size
 
     # tensor2tensor.layers.modalities.SymbolModality
+    symbol = ('symbol:embed', source_vocab_size)
+    
     p.input_modality = {
-        "inputs": (registry.Modalities.SYMBOL, source_vocab_size)
+        "inputs": symbol,
+        "lexical":  symbol,
+        "position1": ('symbol:position', None),
+        "position2": ('symbol:position', None)
     }
     # p.target_modality = (registry.Modalities.CLASS_LABEL, target_vocab_size)
-    p.target_modality = ('class_label:identity', target_vocab_size)    
+    identity = (registry.Modalities.GENERIC, None)
+    p.target_modality = identity
     p.input_space_id = problem.SpaceID.EN_TOK
     p.target_space_id = problem.SpaceID.GENERIC
   
@@ -211,8 +220,13 @@ class SemEval2010Task8(problem.Problem):
   
   # def preprocess_example(self, example, mode, hparams):
   #   '''Called by `self.dataset` '''
+  #   f = example['lexical']
+  #   while len(f.get_shape()) < 4:
+  #     f = tf.expand_dims(f, axis=-1)
+
+  #   example['lexical'] = f
   #   return super(SemEval2010Task8, self). \
-  #                                 preprocess_example(example, hparams, mode)
+  #                                 preprocess_example(example, mode, hparams)
 
   # def input_fn(self, mode, hparams, data_dir=None, params=None, config=None,
   #              dataset_kwargs=None):
