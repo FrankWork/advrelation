@@ -218,6 +218,25 @@ class SemEval2010Task8(problem.Problem):
     data_items_to_decoders = None
     return (data_fields, data_items_to_decoders)
   
+  def get_length(self, data_dir, tmp_dir):
+    '''for inspect_record.py'''
+    train_paths = self.training_filepaths(
+        data_dir, self.num_shards, shuffled=True)
+    dev_paths = self.dev_filepaths(data_dir, 1, shuffled=True)
+
+    length = []
+    for i, file in enumerate(train_paths + dev_paths):
+      tf.logging.info('read file %d' % i)
+      reader = tf.python_io.tf_record_iterator(file)
+      for record in reader:
+        x = tf.train.Example()
+        x.ParseFromString(record)
+        inputs = [int(i) for i in x.features.feature["inputs"].int64_list.value]
+        n = len(inputs)
+        length.append(n)
+    return length
+  
+
   # def preprocess_example(self, example, mode, hparams):
   #   '''Called by `self.dataset` '''
   #   f = example['lexical']

@@ -83,8 +83,10 @@ class OnehotClassLabelModality(modality.Modality):
                                            self._body_input_depth)
 
   def targets_bottom(self, x):
+    '''return label tensor with shape `[batch, 1]`
+    '''
     with tf.variable_scope(self.name):
-      return tf.one_hot(x, self._vocab_size)
+      return x
 
   def top(self, body_output, _):
     """Transform inputs from model space to target space.
@@ -92,10 +94,10 @@ class OnehotClassLabelModality(modality.Modality):
     Average over inner dims and a linear layer to logits.
 
     Args:
-      body_output: A Tensor with shape [batch, body_output_size].
+      body_output: A Tensor with shape [batch, 1, body_output_size].
 
     Returns:
-      a Tensors, each with shape [batch_size, vocab_size]
+      a Tensors, each with shape [batch_size, 1, vocab_size]
     """
     with tf.variable_scope(self.name):
       x = body_output
@@ -103,6 +105,4 @@ class OnehotClassLabelModality(modality.Modality):
       res = tf.layers.dense(x, self._vocab_size)
       # return tf.expand_dims(res, 3)
       return res
-    # logits: a `Tensor` with shape `[batch, timesteps, vocab_size]`.
-    #   optionally a FactoredTensor.
-    # labels: an integer `Tensor` with shape `[batch, timesteps]`.
+    

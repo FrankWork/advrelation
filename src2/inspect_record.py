@@ -26,63 +26,58 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+
 # Dependency imports
+from tensor2tensor.utils import registry
+from tensor2tensor.utils import usr_dir
+from tensor2tensor.utils import flags as t2t_flags  # pylint: disable=unused-import
 
-from tensor2tensor.data_generators import text_encoder
-
+import numpy as np
 import tensorflow as tf
 
 flags = tf.app.flags
-
-flags.DEFINE_string("subword_text_encoder_filename", "",
-                       "SubwordTextEncoder vocabulary file")
-flags.DEFINE_string("token_text_encoder_filename", "",
-                       "TokenTextEncoder vocabulary file")
-flags.DEFINE_bool("byte_text_encoder", False, "use a ByteTextEncoder")
-flags.DEFINE_string("input_filename", "", "input filename")
-flags.DEFINE_bool("print_inputs", False, "Print decoded inputs to stdout")
-flags.DEFINE_bool("print_targets", False, "Print decoded targets to stdout")
+flags.DEFINE_string("t2t_usr_dir", "",
+                    "Path to a Python module that will be imported. The "
+                    "__init__.py file should include the necessary imports. "
+                    "The imported files should contain registrations, "
+                    "e.g. @registry.register_model calls, that will then be "
+                    "available to the t2t-trainer.")
+flags.DEFINE_string("tmp_dir", "/tmp/t2t_datagen",
+                    "Temporary storage directory, used if --generate_data.")
 
 FLAGS = flags.FLAGS
 
+tf.logging.set_verbosity(tf.logging.DEBUG)
+
+def length_statistics(length):
+  '''get maximum, mean, quantile from length
+  Args:
+    length: list<int>
+  '''
+  length = sorted(length)
+  length = np.asarray(length)
+
+  # p7 = np.percentile(length, 70)
+  # Probability{length < p7} = 0.7
+  percent = [50, 70, 80, 90, 95, 98, 100]
+  quantile = [np.percentile(length, p) for p in percent]
+  
+  print('(percent, quantile)', list(zip(percent, quantile)))
 
 def main(_):
-  """Convert a file to examples."""
-  if FLAGS.subword_text_encoder_filename:
-    encoder = text_encoder.SubwordTextEncoder(
-        FLAGS.subword_text_encoder_filename)
-  elif FLAGS.token_text_encoder_filename:
-    encoder = text_encoder.TokenTextEncoder(FLAGS.token_text_encoder_filename)
-  elif FLAGS.byte_text_encoder:
-    encoder = text_encoder.ByteTextEncoder()
-  else:
-    encoder = None
-  reader = tf.python_io.tf_record_iterator(FLAGS.input_filename)
-  total_sequences = 0
-  total_input_tokens = 0
-  total_target_tokens = 0
-  max_input_length = 0
-  max_target_length = 0
-  for record in reader:
-    x = tf.train.Example()
-    x.ParseFromString(record)
-    inputs = [int(i) for i in x.features.feature["inputs"].int64_list.value]
-    targets = [int(i) for i in x.features.feature["targets"].int64_list.value]
-    if FLAGS.print_inputs:
-      print("INPUTS:\n" + encoder.decode(inputs) if encoder else inputs)
-    if FLAGS.print_targets:
-      print("TARGETS:\n" + encoder.decode(targets) if encoder else targets)
-    total_input_tokens += len(inputs)
-    total_target_tokens += len(targets)
-    total_sequences += 1
-    max_input_length = max(max_input_length, len(inputs))
-    max_target_length = max(max_target_length, len(targets))
+  usr_dir.import_usr_dir(FLAGS.t2t_usr_dir)
 
-  tf.logging.info("total_sequences: %d", total_sequences)
-  tf.logging.info("total_input_tokens: %d", total_input_tokens)
-  tf.logging.info("total_target_tokens: %d", total_target_tokens)
-  tf.logging.info("max_input_length: %d", max_input_length)
-  tf.logging.info("max_target_length: %d", max_target_length)
+  # Generate data if requested.
+  data_dir = os.path.expanduser(FLAGS.data_dir)
+  tmp_dir = os.path.expanduser(FLAGS.tmp_dir)
+
+  problem_name = FLAGS.problems
+  tf.logging.info("Generating data for %s" % problem_name)
+  problem = registry.problem(problem_name)
+  length = problem.get_length(data_dir, tmp_dir)
+
+  length_statistics(length)
 
 
 if __name__ == "__main__":

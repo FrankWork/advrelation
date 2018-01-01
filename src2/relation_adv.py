@@ -104,6 +104,8 @@ class RelationAdv(t2t_model.T2TModel):
       features: dict<string, tensor>, `inputs` tensor is the results of 
                 embedding lookup of the origin `inputs` tensor. Lookup operation
                 is done in `self.bottom`
+    returns:
+      a Tensor, shape `[batch, 1, body_output_size]`
     '''
     is_training = self._hparams.mode == tf.estimator.ModeKeys.TRAIN
     keep_prob = 1.0-self._hparams.dropout
@@ -122,16 +124,15 @@ class RelationAdv(t2t_model.T2TModel):
     concat2 = tf.concat([conv_out, lexical], axis=1)
     if is_training:
       concat2 = tf.nn.dropout(concat2, keep_prob)
-
-    return concat2
-    # linear = LinearLayer('linear1', SEM_CLASS_NUM, True)
-    # logits, loss_l2 = linear(feature)
+   
+    return tf.expand_dims(concat2, axis=1)
+  
 
 @registry.register_hparams
 def relation_adv_base():
   """Set of hyperparameters."""
   hparams = common_hparams.basic_params1()
-  hparams.max_input_seq_length = 97
+  hparams.max_input_seq_length = 103
   hparams.batch_size = 100
   hparams.hidden_size = 50 # word embedding dim
   hparams.dropout = 0.2
