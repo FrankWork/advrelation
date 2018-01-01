@@ -126,7 +126,14 @@ class RelationAdv(t2t_model.T2TModel):
       concat2 = tf.nn.dropout(concat2, keep_prob)
    
     return tf.expand_dims(concat2, axis=1)
+
+class InputShapeHook(tf.train.SessionRunHook):
+  def __init__(self):
+    pass
   
+  def after_run(self, run_context, run_values):
+    run_values.results
+
 @registry.register_model
 class RelationAdvDebug(t2t_model.T2TModel):
     
@@ -136,18 +143,16 @@ class RelationAdvDebug(t2t_model.T2TModel):
     
     return logits, loss
   
-  def estimator_spec_predict(self, features):
-    """Construct EstimatorSpec for PREDICT mode."""
-    predictions = {
-        "inputs": features.get("inputs"),
-        "targets": features.get("inputs"),
-    }
+  def estimator_spec_train(self, loss, num_async_replicas=1, use_tpu=False):
+    """Construct EstimatorSpec for TRAIN mode."""
+    train_op = self.optimize(loss, num_async_replicas=num_async_replicas,
+                             use_tpu=use_tpu)
 
+    
     return tf.estimator.EstimatorSpec(
-        tf.estimator.ModeKeys.PREDICT,
-        predictions=predictions,
-        export_outputs={
-        })
+              tf.estimator.ModeKeys.TRAIN, loss=loss, train_op=train_op, 
+              training_hooks=None,
+              evaluation_hooks=None)
 
 
 @registry.register_hparams
