@@ -127,12 +127,34 @@ class RelationAdv(t2t_model.T2TModel):
    
     return tf.expand_dims(concat2, axis=1)
   
+@registry.register_model
+class RelationAdvDebug(t2t_model.T2TModel):
+    
+  def model_fn(self, features):
+    logits = features['inputs']
+    loss = tf.constant(0.)
+    
+    return logits, loss
+  
+  def estimator_spec_predict(self, features):
+    """Construct EstimatorSpec for PREDICT mode."""
+    predictions = {
+        "inputs": features.get("inputs"),
+        "targets": features.get("inputs"),
+    }
+
+    return tf.estimator.EstimatorSpec(
+        tf.estimator.ModeKeys.PREDICT,
+        predictions=predictions,
+        export_outputs={
+        })
+
 
 @registry.register_hparams
 def relation_adv_base():
   """Set of hyperparameters."""
   hparams = common_hparams.basic_params1()
-  hparams.max_input_seq_length = 103
+  hparams.max_input_seq_length = 100
   hparams.batch_size = 100
   hparams.hidden_size = 50 # word embedding dim
   hparams.dropout = 0.2
