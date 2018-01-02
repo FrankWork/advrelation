@@ -9,7 +9,7 @@ import tensorflow as tf
 from tensor2tensor.data_generators import problem
 from tensor2tensor.data_generators import text_encoder
 from tensor2tensor.data_generators import generator_utils
-
+from tensor2tensor.utils import metrics
 from tensor2tensor.utils import registry
 
 # datasets
@@ -236,7 +236,6 @@ class SemEval2010Task8(problem.Problem):
         length.append(n)
     return length
   
-
   # def preprocess_example(self, example, mode, hparams):
   #   '''Called by `self.dataset` '''
   #   f = example['lexical']

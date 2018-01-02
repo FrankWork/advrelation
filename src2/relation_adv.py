@@ -127,40 +127,14 @@ class RelationAdv(t2t_model.T2TModel):
    
     return tf.expand_dims(concat2, axis=1)
 
-class InputShapeHook(tf.train.SessionRunHook):
-  def __init__(self):
-    pass
-  
-  def after_run(self, run_context, run_values):
-    run_values.results
-
-@registry.register_model
-class RelationAdvDebug(t2t_model.T2TModel):
-    
-  def model_fn(self, features):
-    logits = features['inputs']
-    loss = tf.constant(0.)
-    
-    return logits, loss
-  
-  def estimator_spec_train(self, loss, num_async_replicas=1, use_tpu=False):
-    """Construct EstimatorSpec for TRAIN mode."""
-    train_op = self.optimize(loss, num_async_replicas=num_async_replicas,
-                             use_tpu=use_tpu)
-
-    
-    return tf.estimator.EstimatorSpec(
-              tf.estimator.ModeKeys.TRAIN, loss=loss, train_op=train_op, 
-              training_hooks=None,
-              evaluation_hooks=None)
-
-
 @registry.register_hparams
 def relation_adv_base():
   """Set of hyperparameters."""
   hparams = common_hparams.basic_params1()
-  hparams.max_input_seq_length = 100
+  hparams.max_input_seq_length = 138
+  hparams.max_length = 138
   hparams.batch_size = 100
+  hparams.use_fixed_batch_size=100
   hparams.hidden_size = 50 # word embedding dim
   hparams.dropout = 0.2
   hparams.symbol_dropout = 0.2
@@ -179,4 +153,5 @@ def relation_adv_base():
   hparams.optimizer_adam_epsilon = 1e-6
   hparams.optimizer_adam_beta1 = 0.85
   hparams.optimizer_adam_beta2 = 0.997
+  hparams.eval_steps=80
   return hparams
