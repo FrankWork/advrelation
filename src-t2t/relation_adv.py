@@ -118,7 +118,7 @@ class RelationAdv(t2t_model.T2TModel):
 
     conv_layer = ConvLayer('conv1')
     conv_out = conv_layer(concat1)
-    conv_out = max_pool(conv_out, self._hparams.max_input_seq_length)
+    conv_out = max_pool(conv_out, self._hparams.max_length)
     
     lexical = tf.reshape(features['lexical'], [-1, 6*self._hparams.hidden_size])
     concat2 = tf.concat([conv_out, lexical], axis=1)
@@ -131,7 +131,6 @@ class RelationAdv(t2t_model.T2TModel):
 def relation_adv_base():
   """Set of hyperparameters."""
   hparams = common_hparams.basic_params1()
-  hparams.max_input_seq_length = 138
   hparams.max_length = 138
   hparams.batch_size = 100
   hparams.use_fixed_batch_size=100
@@ -153,5 +152,4 @@ def relation_adv_base():
   hparams.optimizer_adam_epsilon = 1e-6
   hparams.optimizer_adam_beta1 = 0.85
   hparams.optimizer_adam_beta2 = 0.997
-  hparams.eval_steps=80
   return hparams

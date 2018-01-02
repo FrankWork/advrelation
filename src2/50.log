@@ -1,0 +1,32 @@
+Epoch 172 sem 0.10 0.99 0.7611 time 1.15
+Epoch 173 sem 0.11 0.99 0.7621 time 1.06
+Epoch 174 sem 0.11 0.99 0.7654 time 1.13
+Epoch 175 sem 0.10 0.99 0.7650 time 1.14
+Epoch 176 sem 0.10 0.99 0.7611 time 1.14
+Epoch 177 sem 0.10 0.99 0.7621 time 1.18
+Epoch 178 sem 0.10 0.99 0.7629 time 1.17
+Epoch 179 sem 0.10 0.99 0.7571 time 1.16
+Epoch 180 sem 0.10 0.99 0.7600 time 1.09
+Epoch 181 sem 0.10 0.99 0.7629 time 1.16
+Epoch 182 sem 0.10 0.99 0.7643 time 1.14
+Epoch 183 sem 0.10 0.99 0.7575 time 1.14
+Epoch 184 sem 0.10 0.99 0.7618 time 1.17
+Epoch 185 sem 0.09 0.99 0.7636 time 1.18
+Epoch 186 sem 0.09 0.99 0.7625 time 1.18
+Epoch 187 sem 0.09 0.99 0.7600 time 1.18
+Epoch 188 sem 0.09 0.99 0.7618 time 1.15
+Epoch 189 sem 0.09 0.99 0.7593 time 1.15
+Epoch 190 sem 0.09 0.99 0.7625 time 1.11
+Epoch 191 sem 0.09 0.99 0.7571 time 1.15
+Epoch 192 sem 0.09 0.99 0.7643 time 1.13
+Epoch 193 sem 0.09 0.99 0.7650 time 1.13
+Epoch 194 sem 0.09 0.99 0.7636 time 1.16
+Epoch 195 sem 0.09 0.99 0.7604 time 1.19
+Epoch 196 sem 0.09 0.99 0.7654 time 1.13
+Epoch 197 sem 0.09 0.99 0.7586 time 1.18
+Epoch 198 sem 0.09 0.99 0.7614 time 1.20
+Epoch 199 sem 0.09 0.99 0.7618 time 1.13
+Done training, best_epoch: 157, best_acc: 0.7686
+duration: 0.07 hours
+
+macro-averaged F1 = 80.93%
