@@ -1,32 +1,64 @@
-Epoch 172 sem 0.10 0.99 0.7611 time 1.15
-Epoch 173 sem 0.11 0.99 0.7621 time 1.06
-Epoch 174 sem 0.11 0.99 0.7654 time 1.13
-Epoch 175 sem 0.10 0.99 0.7650 time 1.14
-Epoch 176 sem 0.10 0.99 0.7611 time 1.14
-Epoch 177 sem 0.10 0.99 0.7621 time 1.18
-Epoch 178 sem 0.10 0.99 0.7629 time 1.17
-Epoch 179 sem 0.10 0.99 0.7571 time 1.16
-Epoch 180 sem 0.10 0.99 0.7600 time 1.09
-Epoch 181 sem 0.10 0.99 0.7629 time 1.16
-Epoch 182 sem 0.10 0.99 0.7643 time 1.14
-Epoch 183 sem 0.10 0.99 0.7575 time 1.14
-Epoch 184 sem 0.10 0.99 0.7618 time 1.17
-Epoch 185 sem 0.09 0.99 0.7636 time 1.18
-Epoch 186 sem 0.09 0.99 0.7625 time 1.18
-Epoch 187 sem 0.09 0.99 0.7600 time 1.18
-Epoch 188 sem 0.09 0.99 0.7618 time 1.15
-Epoch 189 sem 0.09 0.99 0.7593 time 1.15
-Epoch 190 sem 0.09 0.99 0.7625 time 1.11
-Epoch 191 sem 0.09 0.99 0.7571 time 1.15
-Epoch 192 sem 0.09 0.99 0.7643 time 1.13
-Epoch 193 sem 0.09 0.99 0.7650 time 1.13
-Epoch 194 sem 0.09 0.99 0.7636 time 1.16
-Epoch 195 sem 0.09 0.99 0.7604 time 1.19
-Epoch 196 sem 0.09 0.99 0.7654 time 1.13
-Epoch 197 sem 0.09 0.99 0.7586 time 1.18
-Epoch 198 sem 0.09 0.99 0.7614 time 1.20
-Epoch 199 sem 0.09 0.99 0.7618 time 1.13
-Done training, best_epoch: 157, best_acc: 0.7686
-duration: 0.07 hours
+Epoch 175 sem 0.10 0.99 0.7679 time 5.04
+Epoch 176 sem 0.10 0.99 0.7732 time 4.85
+Epoch 177 sem 0.10 0.99 0.7686 time 5.38
+Epoch 178 sem 0.10 0.99 0.7725 time 5.09
+Epoch 179 sem 0.10 0.99 0.7671 time 5.05
+Epoch 180 sem 0.10 0.99 0.7721 time 4.96
+Epoch 181 sem 0.10 0.99 0.7725 time 4.75
+Epoch 182 sem 0.10 0.99 0.7721 time 4.68
+Epoch 183 sem 0.10 0.99 0.7689 time 4.73
+Epoch 184 sem 0.09 0.99 0.7646 time 4.65
+Epoch 185 sem 0.09 0.99 0.7704 time 4.58
+Epoch 186 sem 0.09 0.99 0.7686 time 4.83
+Epoch 187 sem 0.09 0.99 0.7704 time 4.79
+Epoch 188 sem 0.10 0.99 0.7711 time 4.81
+Epoch 189 sem 0.10 0.99 0.7661 time 4.71
+Epoch 190 sem 0.10 0.99 0.7650 time 4.74
+Epoch 191 sem 0.09 0.99 0.7639 time 4.72
+Epoch 192 sem 0.09 0.99 0.7700 time 4.79
+Epoch 193 sem 0.09 0.99 0.7639 time 4.78
+Epoch 194 sem 0.09 0.99 0.7679 time 5.12
+Epoch 195 sem 0.09 0.99 0.7686 time 4.78
+Epoch 196 sem 0.08 0.99 0.7654 time 5.15
+Epoch 197 sem 0.09 0.99 0.7721 time 5.06
+Epoch 198 sem 0.09 0.99 0.7671 time 5.15
+Epoch 199 sem 0.09 0.99 0.7629 time 5.03
+Done training, best_epoch: 176, best_acc: 0.7732
+duration: 0.28 hours
 
-macro-averaged F1 = 80.93%
+macro-averaged F1 = 81.68% 
+
+
+$ all with l2_loss
+Epoch 184 sem 0.72 0.99 0.7693 time 3.32
+Epoch 185 sem 0.71 0.99 0.7643 time 3.35
+Epoch 186 sem 0.73 0.99 0.7679 time 3.20
+Epoch 187 sem 0.69 0.99 0.7686 time 3.37
+Epoch 188 sem 0.69 0.99 0.7714 time 3.33
+Epoch 189 sem 0.69 0.99 0.7721 time 3.33
+Epoch 190 sem 0.69 0.99 0.7650 time 3.27
+Epoch 191 sem 0.68 0.99 0.7654 time 3.33
+Epoch 192 sem 0.68 0.99 0.7714 time 3.32
+Epoch 193 sem 0.67 0.99 0.7714 time 3.29
+Epoch 194 sem 0.69 0.99 0.7668 time 3.23
+Epoch 195 sem 0.67 0.99 0.7668 time 3.25
+Epoch 196 sem 0.65 0.99 0.7643 time 3.33
+Epoch 197 sem 0.66 0.99 0.7679 time 3.30
+Epoch 198 sem 0.66 0.99 0.7686 time 3.29
+Epoch 199 sem 0.65 0.99 0.7643 time 2.94
+Done training, best_epoch: 163, best_acc: 0.7757
+duration: 0.12 hours
+
+macro-averaged F1 = 81.54% >>>
+
+$ no l2_loss at all
+Done training, best_epoch: 112, best_acc: 0.7743
+duration: 0.11 hours
+macro-averaged F1 = 81.62% >>>
+
+$ adv no l2_loss
+Epoch 199 sem 0.61 0.99 0.7629 time 2.10
+Done training, best_epoch: 132, best_acc: 0.7768
+duration: 0.12 hours
+
+macro-averaged F1 = 81.56% 

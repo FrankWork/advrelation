@@ -40,17 +40,18 @@ class CNNModel(BaseModel):
 
     self.tensors = dict()
 
+    self.conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
+    self.linear_layer = LinearLayer('linear_semeval', CLASS_NUM, True)
+
     with tf.variable_scope('semeval_graph'):
       self.build_semeval_graph(semeval_data)
 
-
-  def build_semeval_graph(self, data):
+  def bottom(self, data):
     lexical, labels, sentence, pos1, pos2 = data
 
     # embedding lookup
     weight = self.word_dim**0.5
     lexical = tf.nn.embedding_lookup(self.word_embed, lexical)
-    lexical = tf.reshape(lexical, [-1, 6*self.word_dim])
     # lexical *= weight
 
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
@@ -63,31 +64,56 @@ class CNNModel(BaseModel):
     if self.is_train:
       sent_pos = tf.nn.dropout(sent_pos, FLAGS.keep_prob)
     
-    conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
-    conv_out = conv_layer(sent_pos)
+    return lexical, labels, sent_pos
+
+  def xentropy_loss(self, lexical, sent_pos, labels, l2_coef=0.01):
+    conv_out = self.conv_layer(sent_pos)
     pool_out = max_pool(conv_out, MAX_LEN)
 
+    lexical = tf.reshape(lexical, [-1, 6*self.word_dim])
     feature = tf.concat([lexical, pool_out], axis=1)
     if self.is_train:
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
 
     # Map the features to 19 classes
-    linear = LinearLayer('linear_semeval', CLASS_NUM, True)
-    logits, loss_l2 = linear(feature)
+    logits, loss_l2 = self.linear_layer(feature)
 
     xentropy = tf.nn.softmax_cross_entropy_with_logits(
                                   labels=tf.one_hot(labels, CLASS_NUM), 
                                   logits=logits)
     loss_ce = tf.reduce_mean(xentropy)
 
-    loss = loss_ce + FLAGS.l2_coef*loss_l2
+    loss = loss_ce + l2_coef*loss_l2
+
+    return logits, loss
+  
+  def adv_example(self, input, loss):
+    grad, = tf.gradients(
+        loss,
+        input,
+        aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
+    grad = tf.stop_gradient(grad)
+    perturb = scale_l2(grad)
+    return input + perturb
+
+  def adversarial_loss(self, lexical, sent_pos, loss, labels):
+    adv_lexical = self.adv_example(lexical, loss)
+    adv_sent_pos = self.adv_example(sent_pos, loss)
+    _, loss = self.xentropy_loss(adv_lexical, adv_sent_pos, labels, l2_coef=0)
+    return loss
+
+  def build_semeval_graph(self, data):
+    lexical, labels, sent_pos = self.bottom(data)
+    
+    logits, loss = self.xentropy_loss(lexical, sent_pos, labels)
+    adv_loss = self.adversarial_loss(lexical, sent_pos, loss, labels)
 
     pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)
     acc = tf.reduce_mean(acc)
 
     self.tensors['acc'] = acc
-    self.tensors['loss'] = loss
+    self.tensors['loss'] = loss + adv_loss
     self.tensors['pred'] = pred
 
 
