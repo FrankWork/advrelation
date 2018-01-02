@@ -10,7 +10,7 @@ flags.DEFINE_float("keep_prob", 0.5, "dropout keep probability")
 
 FLAGS = flags.FLAGS
 
-MAX_LEN = 139
+MAX_LEN = 98
 CLASS_NUM = 19
 
 
@@ -22,15 +22,15 @@ class CNNModel(BaseModel):
     self.is_adv = is_adv
 
     # embedding initialization
-    # self.word_dim = word_embed.shape[1]
-    self.word_dim = 50
-    w_trainable = True #if self.word_dim==50 else False
+    self.word_dim = word_embed.shape[1]
+    # self.word_dim = 50
+    w_trainable = True if self.word_dim==50 else False
     
-    # initializer=word_embed,
-    initializer= tf.random_normal_initializer(0.0, self.word_dim**-0.5)
-    shape = [8097, self.word_dim]
+    initializer=word_embed
+    # initializer= tf.random_normal_initializer(0.0, self.word_dim**-0.5)
+    # shape = [8097, self.word_dim]
     self.word_embed = tf.get_variable('word_embed', 
-                                      shape=shape,
+                                      # shape=shape,
                                       initializer= initializer,
                                       dtype=tf.float32,
                                       trainable=w_trainable)
@@ -51,10 +51,10 @@ class CNNModel(BaseModel):
     weight = self.word_dim**0.5
     lexical = tf.nn.embedding_lookup(self.word_embed, lexical)
     lexical = tf.reshape(lexical, [-1, 6*self.word_dim])
-    lexical *= weight
+    # lexical *= weight
 
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
-    sentence *= weight
+    # sentence *= weight
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 

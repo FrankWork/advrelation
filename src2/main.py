@@ -4,7 +4,9 @@ import sys
 import tensorflow as tf
 import numpy as np
 
-from inputs import semeval_v2 as semeval
+# from inputs import semeval_v2 as semeval
+from inputs import util
+from inputs import semeval
 from models import cnn_model
 
 # tf.set_random_seed(0)
@@ -23,6 +25,37 @@ flags.DEFINE_boolean('is_test', False, 'set True to test')
 FLAGS = tf.app.flags.FLAGS
 
 tf.logging.set_verbosity(tf.logging.INFO)
+
+def build_data():
+  '''load raw data, build vocab, build TFRecord data, trim embeddings
+  '''
+  def _build_vocab( semeval_data):
+    print('build vocab')
+    
+    vocab = semeval.build_vocab(semeval_data)
+    print('semeval vocab: %d' % len(vocab))
+
+    util.write_vocab(vocab)
+    
+  def _build_data(semeval_train, semeval_test):
+    vocab2id = util.load_vocab2id()
+
+    print('convert semeval data to TFRecord')
+    semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
+
+  def _trim_embed():
+    print('trimming pretrained embeddings')
+    util.trim_embeddings(50)
+    # util.trim_embeddings(300)
+
+  print('load raw data')
+  semeval_train, semeval_test = semeval.load_raw_data(verbose=True)
+
+  _build_vocab(semeval_train + semeval_test)
+
+  _build_data(semeval_train, semeval_test)
+
+  _trim_embed()
 
 def train_semeval(sess, m_train, m_valid, semeval_test_iter):
   best_acc, best_epoch = 0., 0
@@ -95,13 +128,12 @@ def test(sess, m_valid, semeval_test_iter):
 
 def main(_):
   if FLAGS.build_data:
-    semeval.generate_data()
+    build_data()
     exit()
 
-  # word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
-  word_embed = None
+  word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
   with tf.Graph().as_default():
-    semeval_train_iter, semeval_test_iter = semeval.read_data(
+    semeval_train_iter, semeval_test_iter = semeval.read_tfrecord(
                                           FLAGS.num_epochs, FLAGS.batch_size)
     model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
     semeval_train = semeval_train_iter.get_next()

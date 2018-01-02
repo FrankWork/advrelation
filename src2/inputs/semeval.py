@@ -7,9 +7,9 @@ from inputs import util
 
 flags = tf.app.flags
 
-flags.DEFINE_string("semeval_train_file", "data/SemEval/train.txt", 
+flags.DEFINE_string("semeval_train_file", "data/SemEval/train.cln", 
                              "original training file")
-flags.DEFINE_string("semeval_test_file", "data/SemEval/test.txt", 
+flags.DEFINE_string("semeval_test_file", "data/SemEval/test.cln", 
                              "original test file")
 
 flags.DEFINE_string("semeval_vocab_file", "data/generated/vocab.semeval.txt", 
@@ -35,9 +35,6 @@ MAX_VOCAB_SIZE = 2**13
 Raw_Example = namedtuple('Raw_Example', 'label entity1 entity2 sentence')
 PositionPair = namedtuple('PosPair', 'first last')
 
-_entity_regex = re.compile(r"<e[12]>(.*?)</e[12]>")
-_etag_mask = re.compile(r"</?e[12]>")
-
 def _load_relations():
   id2relation = []
   relation2id = dict()
@@ -50,54 +47,25 @@ def _load_relations():
   
   return relation2id, id2relation
 
-def _find_entity_pos(entity, tokens):
-  ''' find start and ending position of the entity in tokens
-  '''
-  n = len(entity)
-  for i in range(len(tokens)):
-    if tokens[i:i+n]==entity:
-      first, last = i, i+n-1
-      return PositionPair(first, last)
-
-def _load_raw_data(filename, relation2id):
+def _load_raw_data(filename):
   '''load raw data from text file, 
-  file contents:
-    1	"The ... an arrayed <e1>configuration</e1> of antenna <e2>elements</e2>."
-    Component-Whole(e2,e1)
-    Comment: Not a collection: there is structure here, organisation.
-
-    2	"The <e1>child</e1> ... the <e2>cradle</e2> by means of a cord."
-    Other
-    Comment:
-
-    EOF
 
   return: a list of Raw_Example
   '''
   data = []
-  lines = open(filename).readlines()
-  n = len(lines)
-  assert n % 4 == 0
-  for i in range(n//4):
-    sentence = lines[4*i].split('\t')[1].strip('"|\n').lower()
-    
-    entities = _entity_regex.findall(sentence)
-    assert len(entities) == 2
+  with open(filename) as f:
+    for line in f:
+      words = line.strip().split(' ')
+      
+      sent = words[5:]
 
-    sentence = _etag_mask.sub(' ', sentence)
-    tokens = util.wordpunct_tokenizer(sentence)
+      label = int(words[0])
 
-    entities = [util.wordpunct_tokenizer(entity) for entity in entities]
-    entity1 = _find_entity_pos(entities[0], tokens)
-    entity2 = _find_entity_pos(entities[1], tokens)
-    assert entity1 is not None and entity2 is not None
+      entity1 = PositionPair(int(words[1]), int(words[2]))
+      entity2 = PositionPair(int(words[3]), int(words[4]))
 
-    rel_text = lines[4*i+1].strip()
-    label = relation2id[rel_text]
-
-    example = Raw_Example(label, entity1, entity2, tokens)
-    data.append(example)
-
+      example = Raw_Example(label, entity1, entity2, sent)
+      data.append(example)
   return data
 
 def _length_statistics(raw_train_data, raw_test_data):
@@ -108,9 +76,9 @@ def _length_statistics(raw_train_data, raw_test_data):
   util.length_statistics(length1 + length2)
 
 def load_raw_data(verbose=False):
-  relation2id, _ = _load_relations()
-  train_data = _load_raw_data(FLAGS.semeval_train_file, relation2id)
-  test_data = _load_raw_data(FLAGS.semeval_test_file, relation2id)
+  # relation2id, _ = _load_relations()
+  train_data = _load_raw_data(FLAGS.semeval_train_file)
+  test_data = _load_raw_data(FLAGS.semeval_test_file)
   if verbose:
     _length_statistics(train_data, test_data)
   return train_data, test_data
@@ -133,7 +101,7 @@ def build_vocab(raw_data):
       vocab_freqs.items(), key=lambda item: item[1], reverse=True)
 
   # Limit vocab size
-  ordered_vocab_freqs = ordered_vocab_freqs[:MAX_VOCAB_SIZE]
+  # ordered_vocab_freqs = ordered_vocab_freqs[:MAX_VOCAB_SIZE]
 
   vocab = [token for token, _ in ordered_vocab_freqs]
   util.write_vocab(vocab, FLAGS.semeval_vocab_file)
