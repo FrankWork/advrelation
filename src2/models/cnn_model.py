@@ -62,22 +62,20 @@ class CNNModel(BaseModel):
     return (emb - mean) / stddev
 
   def bottom(self, data):
-    lexical, labels, length, sentence, pos1, pos2 = data
+    labels, length, sentence, ent1_toks, ent1_pos, ent2_toks, ent2_pos, pos1, pos2 = data
 
     # embedding lookup
-    # weight = self.word_dim**0.5
-    lexical = tf.nn.embedding_lookup(self.word_embed, lexical)
-    # lexical *= weight
-    # lexical = scale_l2(lexical)
-
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
+    ent1 = tf.nn.embedding_lookup(self.word_embed, ent1)
+    ent2 = tf.nn.embedding_lookup(self.word_embed, ent2)
+    # weight = self.word_dim**0.5
     # sentence *= weight
     # sentence = scale_l2(sentence)
 
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
-    return lexical, labels, length, sentence, pos1, pos2
+    return labels, length, sentence, ent1, ent2, pos1, pos2
 
   def xentropy_logits_and_loss(self, lexical, sentence, pos1, pos2, labels, l2_coef=0.01):
     if self.is_train:
@@ -160,18 +158,24 @@ class CNNModel(BaseModel):
 
     return self.kl_divergence_with_logits(logits, vadv_logits)
 
-  def word_attention(self, entities, sentence):
+  def word_attention(self, ent1, ent2, sentence, pos1, pos2):
     '''from paper Effective Deep Memory Networks for Distant Supervised Relation Extraction
     Args: 
-      entities: [batch, 2, d]
-      sentence: [batch, len, d]
+      ent1: [batch, len1, d]
+      ent2: [batch, len2, d]
+      sentence: [batch, len3, d]
     '''
+    batch = 100
+    ent1 = tf.reduce_mean(tf.reshape(ent1, [batch, -1]), axis=-1)
+    ent2 = tf.reduce_mean(tf.reshape(ent2, [batch, -1]), axis=-1)
+    pair = tf.concat([ent1, ent2], axis=-1)
+
     e_flat = tf.reshape(entities, [-1, 1, 2*self.word_dim])
     ones = tf.ones_like(tf.concat([sentence, sentence], axis=-1))
     e_tile = ones * e_flat
     x3d = tf.concat([e_tile, sentence], axis=-1) # (batch, len, 3d)
 
-    batch = 100
+    
     w3d = tf.tile(tf.expand_dims(self.w_att, axis=0), [batch, 1, 1])# (batch, 3d, 1)
     g = tf.nn.tanh(tf.nn.xw_plus_b(x3d, w3d, self.b_att)) #(batch, len, 1)
 
@@ -181,8 +185,8 @@ class CNNModel(BaseModel):
     return y
     
   def build_semeval_graph(self, data):
-    lexical, labels, length, sentence, pos1, pos2 = self.bottom(data)
-    lexical = self.word_attention(lexical, sentence)
+    labels, length, sentence, ent1, ent2, pos1, pos2 = self.bottom(data)
+    lexical = self.word_attention(ent1, ent2, sentence, pos1, pos2)
     
     logits, loss = self.xentropy_logits_and_loss(lexical, sentence, pos1, pos2, labels)
     if self.is_adv:
