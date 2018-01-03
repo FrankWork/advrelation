@@ -36,16 +36,18 @@ class CNNModel(BaseModel):
                                       dtype=tf.float32,
                                       trainable=w_trainable)
     # self.word_embed = self.normalize_embed(self.word_embed, vocab_freq)
-    pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]  
+    pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]
     self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
+    self.embed_dim = self.word_dim + 2* FLAGS.pos_dim
     self.conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
     self.linear_layer = LinearLayer('linear_semeval', 300+self.word_dim, CLASS_NUM, True)
 
     # word attention
     self.w_att = tf.get_variable('w_att', [3*self.word_dim, 1])
     self.b_att = tf.get_variable('b_att', [1])
+    self.linear_att = LinearLayer('linear_att', in_size, out_size, False)
 
     self.tensors = dict()
 
@@ -62,20 +64,35 @@ class CNNModel(BaseModel):
     return (emb - mean) / stddev
 
   def bottom(self, data):
-    labels, length, sentence, ent1_toks, ent1_pos, ent2_toks, ent2_pos, pos1, pos2 = data
+    (label, length, 
+      sentence, position1, position2, 
+      ent1_toks, ent1_pos1, ent1_pos2,
+      ent2_toks, ent2_pos1, ent2_pos2) = data
 
     # embedding lookup
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
-    ent1 = tf.nn.embedding_lookup(self.word_embed, ent1)
-    ent2 = tf.nn.embedding_lookup(self.word_embed, ent2)
+    ent1_toks = tf.nn.embedding_lookup(self.word_embed, ent1_toks)
+    ent2_toks = tf.nn.embedding_lookup(self.word_embed, ent2_toks)
     # weight = self.word_dim**0.5
     # sentence *= weight
     # sentence = scale_l2(sentence)
 
-    pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
-    pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
+    pos1 = tf.nn.embedding_lookup(self.pos1_embed, position1)
+    pos2 = tf.nn.embedding_lookup(self.pos2_embed, position2)
+    ent1_pos1 = tf.nn.embedding_lookup(self.pos1_embed, ent1_pos1)
+    ent1_pos2 = tf.nn.embedding_lookup(self.pos2_embed, ent1_pos2)
+    ent2_pos1 = tf.nn.embedding_lookup(self.pos1_embed, ent2_pos1)
+    ent2_pos2 = tf.nn.embedding_lookup(self.pos2_embed, ent2_pos2)
 
-    return labels, length, sentence, ent1, ent2, pos1, pos2
+    ent1 = tf.concat([ent1, ent1_pos1, ent1_pos2], axis=2)
+    ent2 = tf.concat([ent2, ent2_pos1, ent2_pos2], axis=2)
+
+    ent1 = tf.reduce_mean(ent1, axis=1) # (batch, embed)
+    ent2 = tf.reduce_mean(ent2, axis=1)
+
+    entities = tf.concat([ent1, ent2], axis=-1) # (batch, 2*embed)
+
+    return labels, length, sentence, pos1, pos2, entities
 
   def xentropy_logits_and_loss(self, lexical, sentence, pos1, pos2, labels, l2_coef=0.01):
     if self.is_train:
@@ -158,35 +175,34 @@ class CNNModel(BaseModel):
 
     return self.kl_divergence_with_logits(logits, vadv_logits)
 
-  def word_attention(self, ent1, ent2, sentence, pos1, pos2):
+  def word_attention(self, entities, sentence):
     '''from paper Effective Deep Memory Networks for Distant Supervised Relation Extraction
     Args: 
-      ent1: [batch, len1, d]
-      ent2: [batch, len2, d]
-      sentence: [batch, len3, d]
+      entities: [batch, 2*d]
+      sentence: [batch, len, d]
     '''
     batch = 100
-    ent1 = tf.reduce_mean(tf.reshape(ent1, [batch, -1]), axis=-1)
-    ent2 = tf.reduce_mean(tf.reshape(ent2, [batch, -1]), axis=-1)
-    pair = tf.concat([ent1, ent2], axis=-1)
-
-    e_flat = tf.reshape(entities, [-1, 1, 2*self.word_dim])
     ones = tf.ones_like(tf.concat([sentence, sentence], axis=-1))
-    e_tile = ones * e_flat
+    
+    e3d = tf.expand_dims(entities, axis=1) # (batch, 1, 2*d)
+    e_tile = ones * e3d
     x3d = tf.concat([e_tile, sentence], axis=-1) # (batch, len, 3d)
 
-    
     w3d = tf.tile(tf.expand_dims(self.w_att, axis=0), [batch, 1, 1])# (batch, 3d, 1)
     g = tf.nn.tanh(tf.nn.xw_plus_b(x3d, w3d, self.b_att)) #(batch, len, 1)
 
     alpha = tf.nn.softmax(tf.squeeze(g)) # (batch, len)
     alpha = tf.expand_dims(alpha, axis=-1)
-    y = tf.reduce_sum(alpha * sentence, axis=1)
+    att_out = tf.reduce_sum(alpha * sentence, axis=1) # (batch, d)
+
+    linear_out, _ = self.linear_att(entities)
+
     return y
     
   def build_semeval_graph(self, data):
-    labels, length, sentence, ent1, ent2, pos1, pos2 = self.bottom(data)
-    lexical = self.word_attention(ent1, ent2, sentence, pos1, pos2)
+    labels, length, sentence, pos1, pos2, entities = self.bottom(data)
+    lexical = self.word_attention(entities, 
+                                  tf.concat([sentence, pos1, pos2], axis=2))
     
     logits, loss = self.xentropy_logits_and_loss(lexical, sentence, pos1, pos2, labels)
     if self.is_adv:
