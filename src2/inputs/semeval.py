@@ -12,9 +12,6 @@ flags.DEFINE_string("semeval_train_file", "data/SemEval/train.cln",
 flags.DEFINE_string("semeval_test_file", "data/SemEval/test.cln", 
                              "original test file")
 
-flags.DEFINE_string("semeval_vocab_file", "data/generated/vocab.semeval.txt", 
-                              "vocab of train and test data")
-
 flags.DEFINE_string("semeval_train_record", 
                               "data/generated/train.semeval.tfrecord", 
                              "training file of TFRecord format")
@@ -27,9 +24,11 @@ flags.DEFINE_string("relations_file", "data/SemEval/relations.txt",
 flags.DEFINE_string("results_file", "data/generated/results.txt", 
                              "predicted results file")
 
-flags.DEFINE_integer("semeval_max_len", 96, "max length of sentences")
-
 FLAGS = flags.FLAGS
+
+OUTPUT_DIR = "data/generated"
+VOCAB_FILE = os.path.join(OUTPUT_DIR, "semeval.vocab")
+VOCAB_FREQ_FILE = os.path.join(OUTPUT_DIR, "semeval.vocab.freq")
 
 MAX_VOCAB_SIZE = 2**13
 Raw_Example = namedtuple('Raw_Example', 'label entity1 entity2 sentence')
@@ -103,9 +102,17 @@ def build_vocab(raw_data):
   # Limit vocab size
   # ordered_vocab_freqs = ordered_vocab_freqs[:MAX_VOCAB_SIZE]
 
-  vocab = [token for token, _ in ordered_vocab_freqs]
-  util.write_vocab(vocab, FLAGS.semeval_vocab_file)
-  return vocab
+  # vocab = [token for token, _ in ordered_vocab_freqs]
+  # util.write_vocab(vocab, FLAGS.semeval_vocab_file)
+  # return vocab
+  util.write_vocab_and_freq(ordered_vocab_freqs, VOCAB_FILE, VOCAB_FREQ_FILE)
+  # return ordered_vocab_freqs
+
+def load_vocab_and_freq():
+  return util.load_voab_and_freq(VOCAB_FILE, VOCAB_FREQ_FILE)
+
+def load_vocab2id():
+  return util.load_vocab2id(VOCAB_FILE)
 
 def _map_tokens_and_pad(raw_example, vocab2id):
   '''inplace map tokens in raw_example to ids
@@ -182,7 +189,10 @@ def _build_sequence_example(raw_example):
   label = raw_example['label']
   ex.context.feature['label'].int64_list.value.append(label)
 
-  for word_id in raw_example['sentence']:
+  sentence = raw_example['sentence']
+  ex.context.feature['length'].int64_list.value.append(len(sentence))
+
+  for word_id in sentence:
     word = ex.feature_lists.feature_list['sentence'].feature.add()
     word.int64_list.value.append(word_id)
   
@@ -219,7 +229,8 @@ def _parse_tfexample(serialized_example):
   '''
   context_features={
                       'lexical'   : tf.FixedLenFeature([6], tf.int64),
-                      'label'    : tf.FixedLenFeature([], tf.int64)}
+                      'label'    : tf.FixedLenFeature([], tf.int64),
+                      'length'    : tf.FixedLenFeature([], tf.int64)}
   sequence_features={
                       'sentence' : tf.FixedLenSequenceFeature([], tf.int64),
                       'position1'  : tf.FixedLenSequenceFeature([], tf.int64),
@@ -235,8 +246,9 @@ def _parse_tfexample(serialized_example):
 
   lexical = context_dict['lexical']
   label = context_dict['label']
+  length = context_dict['length']
 
-  return lexical, label, sentence, position1, position2
+  return lexical, label, length, sentence, position1, position2
 
 def read_tfrecord(epoch, batch_size):
   train_data = util.read_tfrecord(FLAGS.semeval_train_record, 

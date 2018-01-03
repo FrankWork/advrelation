@@ -29,16 +29,8 @@ tf.logging.set_verbosity(tf.logging.INFO)
 def build_data():
   '''load raw data, build vocab, build TFRecord data, trim embeddings
   '''
-  def _build_vocab( semeval_data):
-    print('build vocab')
-    
-    vocab = semeval.build_vocab(semeval_data)
-    print('semeval vocab: %d' % len(vocab))
-
-    util.write_vocab(vocab)
-    
   def _build_data(semeval_train, semeval_test):
-    vocab2id = util.load_vocab2id()
+    vocab2id = semeval.load_vocab2id()
 
     print('convert semeval data to TFRecord')
     semeval.write_as_tfrecord(semeval_train, semeval_test, vocab2id)
@@ -51,7 +43,8 @@ def build_data():
   print('load raw data')
   semeval_train, semeval_test = semeval.load_raw_data(verbose=True)
 
-  _build_vocab(semeval_train + semeval_test)
+  print('build vocab')
+  semeval.build_vocab(semeval_train + semeval_test)
 
   _build_data(semeval_train, semeval_test)
 
@@ -131,6 +124,7 @@ def main(_):
     build_data()
     exit()
 
+  _, vocab_freq = semeval.load_vocab_and_freq()
   word_embed = util.load_embedding(word_dim=FLAGS.word_dim)
   with tf.Graph().as_default():
     semeval_train_iter, semeval_test_iter = semeval.read_tfrecord(
@@ -139,7 +133,8 @@ def main(_):
     semeval_train = semeval_train_iter.get_next()
     semeval_test = semeval_test_iter.get_next()
     m_train, m_valid = cnn_model.build_train_valid_model(
-                          model_name, word_embed, semeval_train, semeval_test, 
+                          model_name, word_embed, vocab_freq,
+                          semeval_train, semeval_test, 
                           FLAGS.is_adv, FLAGS.is_test)
     
     init_op = tf.group(tf.global_variables_initializer(),

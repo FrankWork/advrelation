@@ -8,7 +8,7 @@ from collections import namedtuple
 
 flags = tf.app.flags
 
-flags.DEFINE_string("vocab_file", "data/generated/vocab.txt", 
+flags.DEFINE_string("vocab_file", "data/generated/semeval.vocab", 
                               "vocab of train and test data")
 
 flags.DEFINE_string("google_embed300_file", 
@@ -63,6 +63,21 @@ def write_vocab(vocab, vocab_file=FLAGS.vocab_file):
     f.write('%s\n' % PAD_WORD) # make sure the pad id is 0
     for w in vocab:
       f.write('%s\n' % w)
+
+def write_vocab_and_freq(vocab_freq, vocab_file, freq_file):
+  with open(vocab_file, 'w') as v_writer:
+    with open(freq_file, 'w') as f_writer:
+      v_writer.write('%s\n' % PAD_WORD)
+      f_writer.write('%d\n' % len(vocab_freq))
+      for token, freq in vocab_freq:
+        v_writer.write('%s\n' % token)
+        f_writer.write('%d\n' % freq)
+
+def load_voab_and_freq(vocab_file, freq_file):
+  vocab = _load_vocab(vocab_file)
+  freq = _load_vocab(freq_file)
+  freq = [int(x) for x in freq]
+  return vocab, freq
 
 def _load_vocab(vocab_file):
   # load vocab from file
@@ -241,7 +256,7 @@ def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
     if shuffle:
       dataset = dataset.shuffle(buffer_size=1000)
     
-    padded_shapes = ([None,], [], [None], [None], [None])
+    padded_shapes = ([None,], [], [], [None], [None], [None])
     dataset = dataset.padded_batch(batch_size, padded_shapes)
     # dataset = dataset.batch(batch_size)
     

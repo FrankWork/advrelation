@@ -159,3 +159,17 @@ def scale_l2(x, norm_length=5):
   x_unit = x / l2_norm
   return norm_length * x_unit
 
+def mask_by_length(t, length):
+  """Mask t, 3-D [batch, time, dim], by length, 1-D [batch,]."""
+  maxlen = t.get_shape().as_list()[1]
+
+  # Subtract 1 from length to prevent the perturbation from going on 'eos'
+  mask = tf.sequence_mask(length, maxlen=maxlen)
+  mask = tf.expand_dims(tf.cast(mask, tf.float32), -1)
+  # shape(mask) = (batch, num_timesteps, 1)
+  return t * mask
+
+def logsoftmax(x):
+    xdev = x - tf.reduce_max(x, 1, keep_dims=True)
+    lsm = xdev - tf.log(tf.reduce_sum(tf.exp(xdev), 1, keep_dims=True))
+    return lsm
