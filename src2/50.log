@@ -213,3 +213,21 @@ Done training, best_epoch: 123, best_acc: 0.7854
 duration: 1.05 hours
 
 macro-averaged F1 = 82.89%
+
+
+
+
+
+$ word attention 1 hop
+poch 193 sem 0.12 0.98 0.7696 time 2.53
+Epoch 194 sem 0.11 0.98 0.7725 time 2.57
+Epoch 195 sem 0.11 0.98 0.7646 time 2.13
+Epoch 196 sem 0.11 0.98 0.7689 time 2.32
+Epoch 197 sem 0.11 0.98 0.7732 time 2.47
+Epoch 198 sem 0.11 0.98 0.7707 time 2.54
+Epoch 199 sem 0.12 0.98 0.7693 time 2.11
+Done training, best_epoch: 157, best_acc: 0.7786
+duration: 0.09 hours
+
+
+macro-averaged F1 = 82.04% >>

@@ -40,10 +40,14 @@ class CNNModel(BaseModel):
     self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
-    self.tensors = dict()
-
     self.conv_layer = ConvLayer('conv_semeval', FILTER_SIZES)
-    self.linear_layer = LinearLayer('linear_semeval', CLASS_NUM, True)
+    self.linear_layer = LinearLayer('linear_semeval', 300+self.word_dim, CLASS_NUM, True)
+
+    # word attention
+    self.w_att = tf.get_variable('w_att', [3*self.word_dim, 1])
+    self.b_att = tf.get_variable('b_att', [1])
+
+    self.tensors = dict()
 
     with tf.variable_scope('semeval_graph'):
       self.build_semeval_graph(semeval_data)
@@ -83,7 +87,7 @@ class CNNModel(BaseModel):
     conv_out = self.conv_layer(sent_pos)
     pool_out = max_pool(conv_out, MAX_LEN)
 
-    lexical = tf.reshape(lexical, [-1, 6*self.word_dim])
+    # lexical = tf.reshape(lexical, [-1, 6*self.word_dim])
     feature = tf.concat([lexical, pool_out], axis=1)
     if self.is_train:
       feature = tf.nn.dropout(feature, FLAGS.keep_prob)
@@ -156,21 +160,42 @@ class CNNModel(BaseModel):
 
     return self.kl_divergence_with_logits(logits, vadv_logits)
 
+  def word_attention(self, entities, sentence):
+    '''from paper Effective Deep Memory Networks for Distant Supervised Relation Extraction
+    Args: 
+      entities: [batch, 2, d]
+      sentence: [batch, len, d]
+    '''
+    e_flat = tf.reshape(entities, [-1, 1, 2*self.word_dim])
+    ones = tf.ones_like(tf.concat([sentence, sentence], axis=-1))
+    e_tile = ones * e_flat
+    x3d = tf.concat([e_tile, sentence], axis=-1) # (batch, len, 3d)
 
+    batch = 100
+    w3d = tf.tile(tf.expand_dims(self.w_att, axis=0), [batch, 1, 1])# (batch, 3d, 1)
+    g = tf.nn.tanh(tf.nn.xw_plus_b(x3d, w3d, self.b_att)) #(batch, len, 1)
+
+    alpha = tf.nn.softmax(tf.squeeze(g)) # (batch, len)
+    alpha = tf.expand_dims(alpha, axis=-1)
+    y = tf.reduce_sum(alpha * sentence, axis=1)
+    return y
+    
   def build_semeval_graph(self, data):
     lexical, labels, length, sentence, pos1, pos2 = self.bottom(data)
-
+    lexical = self.word_attention(lexical, sentence)
+    
     logits, loss = self.xentropy_logits_and_loss(lexical, sentence, pos1, pos2, labels)
-    adv_loss = self.adversarial_loss(loss, lexical, sentence, pos1, pos2, labels)
-    vadv_loss = self.virtual_adversarial_loss(logits, lexical, length, sentence, pos1, pos2)
-    losses = loss + adv_loss + 0.01 * vadv_loss
+    if self.is_adv:
+      adv_loss = self.adversarial_loss(loss, lexical, sentence, pos1, pos2, labels)
+      vadv_loss = self.virtual_adversarial_loss(logits, lexical, length, sentence, pos1, pos2)
+      loss += adv_loss + 0.01 * vadv_loss
 
     pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)
     acc = tf.reduce_mean(acc)
 
     self.tensors['acc'] = acc
-    self.tensors['loss'] = losses
+    self.tensors['loss'] = loss
     self.tensors['pred'] = pred
 
   def build_train_op(self):

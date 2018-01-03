@@ -134,15 +134,15 @@ def _lexical_feature(raw_example):
       e_idx = n-1
     context.append(sent[e_idx])
 
-    if e_idx >= 1:
-      context.append(sent[e_idx-1])
-    else:
-      context.append(sent[e_idx])
+    # if e_idx >= 1:
+    #   context.append(sent[e_idx-1])
+    # else:
+    #   context.append(sent[e_idx])
     
-    if e_idx < len(sent)-1:
-      context.append(sent[e_idx+1])
-    else:
-      context.append(sent[e_idx])
+    # if e_idx < len(sent)-1:
+    #   context.append(sent[e_idx+1])
+    # else:
+    #   context.append(sent[e_idx])
     
     return context
 
@@ -228,7 +228,7 @@ def _parse_tfexample(serialized_example):
   sequence features: sentence, position1, position2
   '''
   context_features={
-                      'lexical'   : tf.FixedLenFeature([6], tf.int64),
+                      'lexical'   : tf.FixedLenFeature([2], tf.int64),
                       'label'    : tf.FixedLenFeature([], tf.int64),
                       'length'    : tf.FixedLenFeature([], tf.int64)}
   sequence_features={

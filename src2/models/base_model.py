@@ -35,20 +35,19 @@ class BaseModel(object):
 class LinearLayer(tf.layers.Layer):
   '''inherit tf.layers.Layer to cache trainable variables
   '''
-  def __init__(self, layer_name, out_size, is_regularize, **kwargs):
+  def __init__(self, layer_name, in_size, out_size, is_regularize, **kwargs):
     self.layer_name = layer_name
+    self.in_size = in_size
     self.out_size = out_size
     self.is_regularize = is_regularize
     super(LinearLayer, self).__init__(**kwargs)
   
   def build(self, input_shape):
-    in_size = input_shape[1]
-
     with tf.variable_scope(self.layer_name):
       w_init = tf.truncated_normal_initializer(stddev=0.1)
       b_init = tf.constant_initializer(0.1)
 
-      self.w = self.add_variable('W', [in_size, self.out_size], initializer=w_init)
+      self.w = self.add_variable('W', [self.in_size, self.out_size], initializer=w_init)
       self.b = self.add_variable('b', [self.out_size], initializer=b_init)
 
       super(LinearLayer, self).build(input_shape)
