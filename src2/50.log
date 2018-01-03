@@ -1,3 +1,4 @@
+$ adv
 Epoch 0 sem 20.60 0.13 0.4000 time 2.54
 Epoch 1 sem 13.17 0.24 0.4904 time 1.91
 Epoch 2 sem 9.52 0.35 0.5579 time 1.97
@@ -202,3 +203,13 @@ Done training, best_epoch: 166, best_acc: 0.7807
 duration: 0.17 hours
 
 macro-averaged F1 = 82.40% 
+
+$ adv + 0.01 vadv
+Epoch 196 sem 0.38 0.99 0.7761 time 22.96
+Epoch 197 sem 0.40 0.99 0.7764 time 23.08
+Epoch 198 sem 0.37 0.99 0.7761 time 23.14
+Epoch 199 sem 0.37 0.99 0.7729 time 23.20
+Done training, best_epoch: 123, best_acc: 0.7854
+duration: 1.05 hours
+
+macro-averaged F1 = 82.89%

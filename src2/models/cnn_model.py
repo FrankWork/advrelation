@@ -163,7 +163,7 @@ class CNNModel(BaseModel):
     logits, loss = self.xentropy_logits_and_loss(lexical, sentence, pos1, pos2, labels)
     adv_loss = self.adversarial_loss(loss, lexical, sentence, pos1, pos2, labels)
     vadv_loss = self.virtual_adversarial_loss(logits, lexical, length, sentence, pos1, pos2)
-    losses = loss + adv_loss + vadv_loss
+    losses = loss + adv_loss + 0.01 * vadv_loss
 
     pred = tf.argmax(logits, axis=1)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)
