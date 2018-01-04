@@ -1,6 +1,6 @@
 import os
+import math
 import tensorflow as tf
-from tensorflow.python.framework import ops
 
 flags = tf.app.flags
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
@@ -28,12 +28,16 @@ class BaseModel(object):
   def save(self, session, global_step):
     self.saver.save(session, self.save_path, global_step)
 
+he_normal = tf.keras.initializers.he_normal()
+regularizer = tf.contrib.layers.l2_regularizer(1e-4)
+
 def Convolutional_Block(inputs, shortcut, num_filters, name, is_training):
     print("-"*20)
     print("Convolutional Block", str(num_filters), name)
     print("-"*20)
+
     with tf.variable_scope("conv_block_" + str(num_filters) + "_" + name):
-        for i in range(2):
+        for i in range(1):
             with tf.variable_scope("conv1d_%s" % str(i)):
                 filter_shape = [3, inputs.get_shape()[2], num_filters]
                 W = tf.get_variable(name='W', shape=filter_shape, 
@@ -66,7 +70,7 @@ def downsampling(inputs, pool_type, name, residual=False, shortcut=None):
     # Maxpooling
     else:
         pool = tf.layers.max_pooling1d(inputs=inputs, pool_size=3, strides=2, padding='same', name=name)
-    if optional_shortcut:
+    if residual:
         shortcut = tf.layers.conv1d(inputs=shortcut, filters=shortcut.get_shape()[2], kernel_size=1,
                             strides=2, padding='same', use_bias=False)
         print("-"*5)

@@ -147,6 +147,11 @@ def main(_):
       sess.run(init_op)
       print('='*80)
 
+      # layers = sess.run(m_train.layers)
+      # for tensor in layers:
+      #   print(tensor.shape)
+      # exit()
+
       if FLAGS.is_test:
         test(sess, m_valid, semeval_test_iter)
       else:

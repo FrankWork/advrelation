@@ -60,13 +60,12 @@ class CNNModel(BaseModel):
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
-    lexical = tf.concat(lex)
-    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
+    sentence = tf.concat([sentence, pos1, pos2], axis=2)
     lexical = tf.reshape(lexical, [-1, 6*self.word_dim])
 
-    return lexical, labels, length, sentence, pos1, pos2
+    return labels, lexical, sentence
 
-  def deep_cnn(self, sentence, lexical, labels, depth=9, residual=False, pool_type='maxpool'):
+  def deep_cnn(self, sentence, lexical, labels, depth=9, residual=True, pool_type='maxpool'):
     # Depth to No. Layers
     if depth == 9:
       num_layers = [2,2,2,2]
@@ -144,10 +143,16 @@ class CNNModel(BaseModel):
       shortcut=shortcut, num_filters=512, is_training=self.is_train, name=str(i+1))
       self.layers.append(conv_block)
 
-    # Extract 8 most features as mentioned in paper
-    self.k_pooled = tf.nn.top_k(tf.transpose(self.layers[-1], [0,2,1]), k=8, name='k_pool', sorted=False)[0]
-    print("8-maxpooling:", self.k_pooled.get_shape())
-    self.flatten = tf.reshape(self.k_pooled, (-1, 512*8))
+    # # Extract 8 most features as mentioned in paper
+    # self.k_pooled = tf.nn.top_k(tf.transpose(self.layers[-1], [0,2,1]), k=8, name='k_pool', sorted=False)[0]
+    # print("8-maxpooling:", self.k_pooled.get_shape())
+    # self.flatten = tf.reshape(self.k_pooled, (-1, 512*8))
+
+    pool_final = tf.layers.max_pooling1d(inputs=self.layers[-1], 
+                pool_size=MAX_LEN, strides=MAX_LEN, padding='same', name='pool_final')
+    print('final max pooling: ', pool_final.get_shape())
+    self.layers.append(pool_final)
+    self.flatten = tf.reshape(pool_final, (-1, 512))
 
     # fc1
     with tf.variable_scope('fc1'):
@@ -165,26 +170,31 @@ class CNNModel(BaseModel):
       out = tf.matmul(self.fc1, w) + b
       self.fc2 = tf.nn.relu(out)
     
-    feature = tf.concat([lexical, self.fc2], axis=1)
+    # feature = tf.concat([lexical, self.fc2], axis=1)
+    feature = tf.concat([lexical, self.flatten], axis=1)
+    # if self.is_train:
+    #     inputs = tf.nn.dropout(inputs, 0.5)
     # fc3
     with tf.variable_scope('fc3'):
       w = tf.get_variable('w', [feature.get_shape()[1], CLASS_NUM], initializer=he_normal,
         regularizer=regularizer)
       b = tf.get_variable('b', [CLASS_NUM], initializer=tf.constant_initializer(1.0))
       self.fc3 = tf.matmul(feature, w) + b
+    logits = self.fc3
 
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
-      losses = tf.nn.softmax_cross_entropy_with_logits(logits=self.fc3, labels=labels)
+      losses = tf.nn.softmax_cross_entropy_with_logits(logits=logits, 
+                  labels=tf.one_hot(labels, CLASS_NUM))
       regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
       loss = tf.reduce_mean(losses) + sum(regularization_losses)
 
     return logits, loss
   
   def build_semeval_graph(self, data):
-    lexical, labels, length, sentence, pos1, pos2 = self.bottom(data)
+    labels, lexical, sentence = self.bottom(data)
 
-    logits, loss = self.xentropy_logits_and_loss(lexical, sentence, pos1, pos2, labels)
+    logits, loss = self.deep_cnn(sentence, lexical, labels)
 
     # Accuracy
     with tf.name_scope("accuracy"):
@@ -203,8 +213,9 @@ class CNNModel(BaseModel):
       update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
       with tf.control_dependencies(update_ops):
         global_step = tf.Variable(0, name="global_step", trainable=False)
-        learning_rate = tf.train.exponential_decay(FLAGS.lrn_rate, global_step, 
-                  FLAGS.num_epochs*FLAGS.num_batches_per_epoch, 0.95, staircase=True)
+        # learning_rate = tf.train.exponential_decay(FLAGS.lrn_rate, global_step, 
+        #           FLAGS.num_epochs*FLAGS.num_batches_per_epoch, 0.95, staircase=True)
+        learning_rate = FLAGS.lrn_rate
         optimizer = tf.train.MomentumOptimizer(learning_rate, 0.9)
         gradients, variables = zip(*optimizer.compute_gradients(loss))
         gradients, _ = tf.clip_by_global_norm(gradients, MAX_NORM)
