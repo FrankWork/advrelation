@@ -170,26 +170,45 @@ def _build_sequence_example(raw_example):
     pos.int64_list.value.append(pos_id)
 
   entity1 = raw_example['entity1']
-  for word_id in sentence[entity1.frist : entity1.last+1]:
+  for word_id in sentence[entity1.first : entity1.last+1]:
     word = ex.feature_lists.feature_list['ent1_toks'].feature.add()
     word.int64_list.value.append(word_id)
-  for pos_id in position1[entity1.frist : entity1.last+1]:
+  for pos_id in position1[entity1.first : entity1.last+1]:
     word = ex.feature_lists.feature_list['ent1_pos1'].feature.add()
     word.int64_list.value.append(pos_id)
-  for pos_id in position2[entity1.frist : entity1.last+1]:
+  for pos_id in position2[entity1.first : entity1.last+1]:
     word = ex.feature_lists.feature_list['ent1_pos2'].feature.add()
     word.int64_list.value.append(pos_id)
 
   entity2 = raw_example['entity2']
-  for word_id in sentence[entity2.frist : entity2.last+1]:
+  for word_id in sentence[entity2.first : entity2.last+1]:
     word = ex.feature_lists.feature_list['ent2_toks'].feature.add()
     word.int64_list.value.append(word_id)
-  for pos_id in position1[entity2.frist : entity2.last+1]:
+  for pos_id in position1[entity2.first : entity2.last+1]:
     word = ex.feature_lists.feature_list['ent2_pos1'].feature.add()
     word.int64_list.value.append(pos_id)
-  for pos_id in position2[entity2.frist : entity2.last+1]:
+  for pos_id in position2[entity2.first : entity2.last+1]:
     word = ex.feature_lists.feature_list['ent2_pos2'].feature.add()
     word.int64_list.value.append(pos_id)
+  
+  context = sentence[:entity1.first] + \
+            sentence[entity1.last+1:entity2.first] + \
+            sentence[entity2.last+1:]
+  for word_id in context:
+    word = ex.feature_lists.feature_list['context'].feature.add()
+    word.int64_list.value.append(word_id)
+  cont_pos1 = position1[:entity1.first] + \
+            position1[entity1.last+1:entity2.first] + \
+            position1[entity2.last+1:]
+  for word_id in cont_pos1:
+    word = ex.feature_lists.feature_list['cont_pos1'].feature.add()
+    word.int64_list.value.append(word_id)
+  cont_pos2 = position2[:entity1.first] + \
+            position2[entity1.last+1:entity2.first] + \
+            position2[entity2.last+1:]
+  for word_id in cont_pos2:
+    word = ex.feature_lists.feature_list['cont_pos2'].feature.add()
+    word.int64_list.value.append(word_id)
 
   return ex
 
@@ -228,7 +247,11 @@ def _parse_tfexample(serialized_example):
                       
                       'ent2_toks'  : tf.FixedLenSequenceFeature([], tf.int64),
                       'ent2_pos1'  : tf.FixedLenSequenceFeature([], tf.int64),
-                      'ent2_pos2'  : tf.FixedLenSequenceFeature([], tf.int64),}
+                      'ent2_pos2'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      
+                      'context'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      'cont_pos1'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      'cont_pos2'  : tf.FixedLenSequenceFeature([], tf.int64),}
   context_dict, sequence_dict = tf.parse_single_sequence_example(
                       serialized_example,
                       context_features   = context_features,
@@ -249,15 +272,21 @@ def _parse_tfexample(serialized_example):
   ent2_pos1 = sequence_dict['ent2_pos1']
   ent2_pos2 = sequence_dict['ent2_pos2']
 
+  context   = sequence_dict['context']
+  cont_pos1 = sequence_dict['cont_pos1']
+  cont_pos2 = sequence_dict['cont_pos2']
+
   return (label, length, 
          sentence, position1, position2, 
          ent1_toks, ent1_pos1, ent1_pos2,
-         ent2_toks, ent2_pos1, ent2_pos2)
+         ent2_toks, ent2_pos1, ent2_pos2,
+         context, cont_pos1, cont_pos2)
 
 def read_tfrecord(epoch, batch_size):
   padded_shapes = ([], [], 
                   [None], [None], [None], 
                   [None], [None], [None], 
+                  [None], [None], [None],
                   [None], [None], [None])
 
   train_data = util.read_tfrecord(FLAGS.semeval_train_record, 

@@ -231,3 +231,16 @@ duration: 0.09 hours
 
 
 macro-averaged F1 = 82.04% >>
+
+
+$ word attention word+pos
+Done training, best_epoch: 43, best_acc: 0.7450
+duration: 0.14 hours
+
+$ word attention word only
+Done training, best_epoch: 46, best_acc: 0.7507
+duration: 0.14 hours
+
+$ word attention linear+relu
+Done training, best_epoch: 48, best_acc: 0.7607
+duration: 0.14 hours
