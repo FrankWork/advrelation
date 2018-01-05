@@ -1,0 +1,56 @@
+Epoch 0 sem 2.98 0.20 0.4400 time 11.75
+Epoch 1 sem 2.03 0.39 0.5575 time 13.31
+Epoch 2 sem 1.75 0.48 0.5843 time 12.86
+Epoch 3 sem 1.53 0.54 0.6343 time 13.08
+Epoch 4 sem 1.39 0.59 0.6489 time 13.24
+Epoch 5 sem 1.33 0.60 0.6650 time 13.48
+Epoch 6 sem 1.22 0.64 0.6839 time 13.11
+Epoch 7 sem 1.17 0.66 0.6961 time 13.41
+Epoch 8 sem 1.11 0.68 0.6957 time 13.26
+Epoch 9 sem 1.07 0.68 0.7068 time 12.92
+Epoch 10 sem 1.03 0.70 0.7057 time 13.08
+Epoch 11 sem 0.99 0.71 0.7036 time 12.51
+Epoch 12 sem 0.96 0.72 0.7143 time 12.55
+Epoch 13 sem 0.92 0.73 0.7179 time 13.05
+Epoch 14 sem 0.91 0.74 0.7311 time 13.15
+Epoch 15 sem 0.87 0.75 0.7300 time 13.46
+Epoch 16 sem 0.86 0.75 0.7261 time 12.88
+Epoch 17 sem 0.82 0.76 0.7325 time 12.63
+Epoch 18 sem 0.79 0.78 0.7375 time 13.37
+Epoch 19 sem 0.77 0.78 0.7375 time 13.20
+Epoch 20 sem 0.76 0.79 0.7371 time 12.92
+Epoch 21 sem 0.73 0.80 0.7489 time 12.52
+Epoch 22 sem 0.71 0.80 0.7382 time 13.36
+Epoch 23 sem 0.68 0.81 0.7446 time 12.81
+Epoch 24 sem 0.67 0.81 0.7496 time 13.04
+Epoch 25 sem 0.66 0.82 0.7504 time 13.00
+Epoch 26 sem 0.62 0.83 0.7543 time 13.15
+Epoch 27 sem 0.62 0.83 0.7539 time 13.00
+Epoch 28 sem 0.61 0.84 0.7511 time 12.68
+Epoch 29 sem 0.58 0.84 0.7561 time 13.14
+Epoch 30 sem 0.57 0.85 0.7457 time 13.29
+Epoch 31 sem 0.55 0.85 0.7521 time 13.01
+Epoch 32 sem 0.53 0.86 0.7479 time 12.57
+Epoch 33 sem 0.53 0.86 0.7607 time 12.70
+Epoch 34 sem 0.51 0.86 0.7600 time 13.17
+Epoch 35 sem 0.49 0.88 0.7571 time 12.71
+Epoch 36 sem 0.49 0.88 0.7600 time 12.91
+Epoch 37 sem 0.47 0.88 0.7611 time 12.74
+Epoch 38 sem 0.46 0.89 0.7546 time 13.15
+Epoch 39 sem 0.45 0.89 0.7654 time 13.01
+Epoch 40 sem 0.43 0.89 0.7557 time 13.23
+Epoch 41 sem 0.45 0.89 0.7636 time 12.89
+Epoch 42 sem 0.41 0.90 0.7629 time 13.14
+Epoch 43 sem 0.41 0.90 0.7611 time 12.70
+Epoch 44 sem 0.39 0.90 0.7621 time 12.49
+Epoch 45 sem 0.39 0.91 0.7575 time 13.12
+Epoch 46 sem 0.38 0.91 0.7596 time 12.69
+Epoch 47 sem 0.38 0.91 0.7679 time 12.60
+Epoch 48 sem 0.36 0.92 0.7657 time 13.26
+Epoch 49 sem 0.36 0.92 0.7629 time 12.90
+Done training, best_epoch: 47, best_acc: 0.7679
+duration: 0.18 hours
+
+
+Done training, best_epoch: 46, best_acc: 0.7664
+duration: 0.19 hours

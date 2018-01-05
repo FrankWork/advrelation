@@ -4,13 +4,10 @@
 
 ## Candidate Methods
 
-- large dimention 256
-- wide and deep
-- combine rnn and cnn, rnn-cnn, cnn-rnn
-- resnet
-- attention
+- attention context
+- wide and deep *
 - adversarial 
-- distant supervision
+- focal loss
 
 ## src
 

@@ -15,7 +15,7 @@ from models import cnn_model
 flags = tf.app.flags
 
 flags.DEFINE_integer("word_dim", 300, "word embedding size")
-flags.DEFINE_integer("num_epochs", 200, "number of epochs")
+flags.DEFINE_integer("num_epochs", 50, "number of epochs")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 
 flags.DEFINE_boolean('build_data', False, 'set True to generate data')
@@ -38,7 +38,7 @@ def build_data():
   def _trim_embed():
     print('trimming pretrained embeddings')
     util.trim_embeddings(50)
-    util.trim_embeddings(300)
+    # util.trim_embeddings(300)
 
   print('load raw data')
   semeval_train, semeval_test = semeval.load_raw_data(verbose=True)
@@ -146,6 +146,10 @@ def main(_):
       sess.run(init_op)
       print('='*80)
 
+      # for t in sess.run(m_train.layers):
+      #   print(t.shape)
+      # exit()
+      
       if FLAGS.is_test:
         test(sess, m_valid, semeval_test_iter)
       else:
