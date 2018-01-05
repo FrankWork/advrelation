@@ -73,6 +73,21 @@ def max_pool(conv_outs, max_len, num_filters_in_conv, flat=True):
 
   return pools
 
+def conv_block_v2(inputs, kernel_size, num_filters, name, training, 
+               batch_norm=False, initializer=None, shortcut=None, reuse=None):
+  with tf.variable_scope(name, reuse=reuse):
+    conv_out = tf.layers.conv1d(inputs, num_filters, kernel_size,
+                  strides=1, padding='same',
+                  kernel_initializer=initializer,
+                  name='conv-%d' % kernel_size,
+                  reuse=reuse)
+    if batch_norm:
+      conv_out = tf.layers.batch_normalization(conv_out, training=training)
+    conv_out = tf.nn.relu(conv_out)
+    if shortcut is not None:
+      conv_out = conv_out + shortcut
+    return conv_out
+
 def pad(tensor, in_filter, out_filter):
   if out_filter != in_filter:
     n = out_filter-in_filter

@@ -17,6 +17,7 @@ CLASS_NUM = 19
 # NUM_POWER_ITER = 1
 # SMALL_CONSTANT = 1e-6
 KERNELS_SIZE = [3]#[3, 4, 5]
+KERNEL_SIZE = 3
 
 class CNNModel(BaseModel):
 
@@ -72,7 +73,7 @@ class CNNModel(BaseModel):
 
     return lexical, labels, length, sentence, pos1, pos2
 
-  def body(self, lexical, sentence, pos1, pos2):
+  def body_deep(self, lexical, sentence, pos1, pos2):
     # num_filters = [60, 125, 300, 60]
     num_filters = [350, 400, 450, 500]
     self.layers = []
@@ -116,6 +117,29 @@ class CNNModel(BaseModel):
     # fc1 = tf.nn.relu(fc1)
     # self.layers.append(fc1)
 
+    body_out = tf.concat([lexical, self.layers[-1]], axis=1)
+    return body_out
+  
+  def body(self, lexical, sentence, pos1, pos2):
+    # num_filters = [60, 125, 300, 60]
+    num_filters = [350, 400, 450, 500]
+    self.layers = []
+
+    sentence = tf.layers.dropout(sentence, 1-FLAGS.keep_prob, training=self.is_train)
+    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
+    self.layers.append(sent_pos)
+
+    # conv 1
+    conv_input = self.layers[-1]
+    conv_out = conv_block_v2(conv_input, KERNEL_SIZE, num_filters[0],
+                            'conv_block1',training=self.is_train, 
+                          initializer=self.he_normal, batch_norm=False)
+
+    pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
+    pool_out = tf.squeeze(pool_out, axis=1)
+    self.layers.append(pool_out)
+
+  
     body_out = tf.concat([lexical, self.layers[-1]], axis=1)
     return body_out
     # return None
