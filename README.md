@@ -6,8 +6,10 @@
 
 - attention context
 - attention pooling
-- adversarial
+- adversarial, vadv unsurpervised
 - focal loss
+- scaled softmax, scaled attention
+- relation net
 
 ## src
 

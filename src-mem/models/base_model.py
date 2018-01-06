@@ -119,6 +119,21 @@ def max_pool(conv_outs, max_len):
 
   return pools
 
+def conv_block_v2(inputs, kernel_size, num_filters, name, training, 
+               batch_norm=False, initializer=None, shortcut=None, reuse=None):
+  with tf.variable_scope(name, reuse=reuse):
+    conv_out = tf.layers.conv1d(inputs, num_filters, kernel_size,
+                  strides=1, padding='same',
+                  kernel_initializer=initializer,
+                  name='conv-%d' % kernel_size,
+                  reuse=reuse)
+    if batch_norm:
+      conv_out = tf.layers.batch_normalization(conv_out, training=training)
+    conv_out = tf.nn.relu(conv_out)
+    if shortcut is not None:
+      conv_out = conv_out + shortcut
+    return conv_out
+  
 def optimize(loss, lrn_rate):
   optimizer = tf.train.AdamOptimizer(lrn_rate)
 
