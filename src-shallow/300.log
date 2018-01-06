@@ -1,4 +1,4 @@
-$ cnn 300
+$ cnn embedding 300
 
 Done training, best_epoch: 48, best_acc: 0.7929
 duration: 0.10 hours
@@ -11,6 +11,7 @@ f1 83.5
 
 Done training, best_epoch: 32, best_acc: 0.7918
 duration: 0.15 hours
+
 
 
 $ deep cnn

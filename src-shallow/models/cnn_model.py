@@ -1,5 +1,6 @@
 import tensorflow as tf
 from models.base_model import * 
+from models.residual import residual_net
 
 flags = tf.app.flags
 
@@ -13,11 +14,11 @@ flags.DEFINE_float("lrn_rate", 0.001, "learning rate")
 FLAGS = flags.FLAGS
 
 MAX_LEN = 98
-CLASS_NUM = 19
+NUM_CLASSES = 19
 # NUM_POWER_ITER = 1
 # SMALL_CONSTANT = 1e-6
-KERNELS_SIZE = [3]#[3, 4, 5]
 KERNEL_SIZE = 3
+NUM_FILTERS = 310
 
 class CNNModel(BaseModel):
 
@@ -47,7 +48,7 @@ class CNNModel(BaseModel):
     self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
-    self.embed_dim = self.word_dim + 2*FLAGS.pos_dim
+    # self.embed_dim = self.word_dim + 2*FLAGS.pos_dim
     self.tensors = dict()
 
     with tf.variable_scope('semeval_graph'):
@@ -73,54 +74,7 @@ class CNNModel(BaseModel):
 
     return lexical, labels, length, sentence, pos1, pos2
 
-  def body_deep(self, lexical, sentence, pos1, pos2):
-    # num_filters = [60, 125, 300, 60]
-    num_filters = [350, 400, 450, 500]
-    self.layers = []
-    n = len(KERNELS_SIZE)
-    drop_rate = 1-FLAGS.keep_prob
-
-    sentence = tf.layers.dropout(sentence, drop_rate, training=self.is_train)
-    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
-    self.layers.append(sent_pos)
-
-    # conv 1
-    conv_input = self.layers[-1]
-    conv_out = conv_block(conv_input, self.embed_dim, KERNELS_SIZE, num_filters[0], 
-                          'conv_block1', training=self.is_train, 
-                          initializer=self.he_normal, batch_norm=False)
-    pool_out = max_pool(conv_out, 1, num_filters[0], flat=False)
-    self.layers.append(pool_out)
-
-    # conv 2
-    residual = self.layers[-2]
-    conv_input = self.layers[-1] + pad(residual, self.embed_dim, num_filters[0])
-    conv_out = conv_block(conv_input, n*num_filters[0], KERNELS_SIZE, num_filters[1], 
-                          'conv_block2', training=self.is_train, 
-                          initializer=self.he_normal, batch_norm=False)
-    pool_out = max_pool(conv_out, 1, num_filters[1], flat=False)
-    self.layers.append(pool_out)
-
-    # conv final
-    residual = self.layers[-2]
-    conv_input = self.layers[-1] + pad(residual, num_filters[0], num_filters[1])
-    conv_out = conv_block(conv_input, n*num_filters[1], KERNELS_SIZE, num_filters[2], 
-                          'conv_block3', training=self.is_train, 
-                          initializer=self.he_normal, batch_norm=False)
-    pool_out = max_pool(conv_out, MAX_LEN, num_filters[2], flat=True)
-    self.layers.append(pool_out)
-
-
-    # fc1 = tf.layers.dense(self.layers[-1], 512, 
-    #                           kernel_initializer=self.he_normal, 
-    #                           kernel_regularizer=self.regularizer)
-    # fc1 = tf.nn.relu(fc1)
-    # self.layers.append(fc1)
-
-    body_out = tf.concat([lexical, self.layers[-1]], axis=1)
-    return body_out
-  
-  def body(self, lexical, sentence, pos1, pos2):
+  def body_shallow(self, lexical, sentence, pos1, pos2):
     # num_filters = [60, 125, 300, 60]
     num_filters = [350, 400, 450, 500]
     self.layers = []
@@ -144,20 +98,49 @@ class CNNModel(BaseModel):
     return body_out
     # return None
   
-  def top(self, body_out, labels):
-    body_out = tf.layers.dropout(body_out, 1-FLAGS.keep_prob, training=self.is_train)
+  def body(self, lexical, sentence, pos1, pos2):
+    sentence = tf.layers.dropout(sentence, 1-FLAGS.keep_prob, training=self.is_train)
+    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
+
+    body_out = residual_net(sent_pos, MAX_LEN, NUM_FILTERS, self.is_train, NUM_CLASSES)
     
-    # Map the features to 19 classes
-    logits = tf.layers.dense(body_out, CLASS_NUM, 
-                              kernel_initializer=self.he_normal, 
-                              kernel_regularizer=self.regularizer)
+    # self.layers = [sent_pos]
+
+    # layer 1
+    # conv_input = self.layers[-1] 
+    # conv_out_tmp = conv_block_v2(conv_input, KERNEL_SIZE, NUM_FILTERS,
+    #                         'conv_block11', training=self.is_train,
+    #                         initializer=self.he_normal, batch_norm=False)
+
+    # conv_out = conv_block_v2(conv_out_tmp, KERNEL_SIZE, NUM_FILTERS,
+    #                         'conv_block12', training=self.is_train,
+    #                         initializer=self.he_normal, batch_norm=False)
+    # self.layers.append(conv_out)
+
+    # # layer final
+    # conv_input = self.layers[-1] + self.layers[-2]
+    # conv_out = conv_block_v2(conv_input, KERNEL_SIZE, NUM_FILTERS,
+    #                         'conv_block_final', training=self.is_train,
+    #                         initializer=self.he_normal, batch_norm=False)
+    # # pooling
+    # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
+    # body_out = tf.squeeze(pool_out, axis=1)
+
+    body_out = tf.layers.dropout(body_out, 1-FLAGS.keep_prob, training=self.is_train)
+    return body_out
+    # return None
+
+  def top(self, body_out, labels):
+    logits = tf.layers.dense(body_out, NUM_CLASSES, kernel_regularizer=self.regularizer)
 
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
-      losses = tf.nn.softmax_cross_entropy_with_logits(logits=logits, 
-                  labels=tf.one_hot(labels, CLASS_NUM))
+      cross_entropy = tf.losses.softmax_cross_entropy(logits=logits, 
+                           onehot_labels=tf.one_hot(labels, NUM_CLASSES))
+
       regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-      loss = tf.reduce_mean(losses) + sum(regularization_losses)
+      loss = cross_entropy + sum(regularization_losses)
+      # loss = cross_entropy #+ FLAGS.l2_coef * tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
 
     return logits, loss
 

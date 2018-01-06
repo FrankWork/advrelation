@@ -14,7 +14,7 @@ from models import cnn_model
 
 flags = tf.app.flags
 
-flags.DEFINE_integer("word_dim", 50, "word embedding size")
+flags.DEFINE_integer("word_dim", 300, "word embedding size")
 flags.DEFINE_integer("num_epochs", 50, "number of epochs")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 
