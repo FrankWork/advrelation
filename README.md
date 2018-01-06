@@ -5,8 +5,8 @@
 ## Candidate Methods
 
 - attention context
-- wide and deep *
-- adversarial 
+- attention pooling
+- adversarial
 - focal loss
 
 ## src

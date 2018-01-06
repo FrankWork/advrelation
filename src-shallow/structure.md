@@ -35,3 +35,8 @@
 * num_blocks 1, block layer 1 : 0.7975
 * num_blocks 1, block layer 1, no 1x1 proj : 0.7936, 0.7946
 * num_blocks 1, block layer 1, 1x1 proj : 0.7896, 0.2921
+
+# res + lexical 
+
+0.7971
+f1 83.86

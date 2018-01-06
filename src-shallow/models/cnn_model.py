@@ -102,29 +102,16 @@ class CNNModel(BaseModel):
     sentence = tf.layers.dropout(sentence, 1-FLAGS.keep_prob, training=self.is_train)
     sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
 
-    body_out = residual_net(sent_pos, MAX_LEN, NUM_FILTERS, self.is_train, NUM_CLASSES)
-    
-    # self.layers = [sent_pos]
-
-    # layer 1
-    # conv_input = self.layers[-1] 
-    # conv_out_tmp = conv_block_v2(conv_input, KERNEL_SIZE, NUM_FILTERS,
-    #                         'conv_block11', training=self.is_train,
-    #                         initializer=self.he_normal, batch_norm=False)
-
-    # conv_out = conv_block_v2(conv_out_tmp, KERNEL_SIZE, NUM_FILTERS,
-    #                         'conv_block12', training=self.is_train,
-    #                         initializer=self.he_normal, batch_norm=False)
-    # self.layers.append(conv_out)
-
-    # # layer final
-    # conv_input = self.layers[-1] + self.layers[-2]
+    res_out = residual_net(sent_pos, MAX_LEN, NUM_FILTERS, self.is_train, NUM_CLASSES)
+    body_out = tf.concat([lexical, res_out], axis=1)
+    # # 1 conv
+    # conv_input = sent_pos
     # conv_out = conv_block_v2(conv_input, KERNEL_SIZE, NUM_FILTERS,
     #                         'conv_block_final', training=self.is_train,
     #                         initializer=self.he_normal, batch_norm=False)
-    # # pooling
     # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
     # body_out = tf.squeeze(pool_out, axis=1)
+
 
     body_out = tf.layers.dropout(body_out, 1-FLAGS.keep_prob, training=self.is_train)
     return body_out
