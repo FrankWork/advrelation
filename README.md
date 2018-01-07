@@ -4,7 +4,7 @@
 
 ## Candidate Methods
 
-- attention context
+- attention context, use the official tensor2tensor's multihead attention implementation
 - attention pooling
 - adversarial, vadv unsurpervised
 - focal loss

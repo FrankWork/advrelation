@@ -40,3 +40,19 @@ hop 1, multi attention
 
 * context:  0.7079, 0.7136
 * sentence: 0.6843
+
+
+# fixed context, dynamic context
+
+hop3, multi attention
+
+* fixed context: 0.7411
+* dynamic context: 0.7579
+
+# with feedforward
+
+hop3, dynamic context
+
+* no feedforward: 0.7579
+* conv ffd      : 0.7593
+* linear ffd    : 0.7604

@@ -188,6 +188,13 @@ def logsoftmax(x):
     lsm = xdev - tf.log(tf.reduce_sum(tf.exp(xdev), 1, keep_dims=True))
     return lsm
 
+
+'''
+June 2017 by kyubyong park. 
+kbpark.linguist@gmail.com.
+https://www.github.com/kyubyong/transformer
+'''
+
 def label_smoothing(inputs, epsilon=0.1):
   '''Applies label smoothing. See https://arxiv.org/abs/1512.00567.
   
@@ -227,6 +234,43 @@ def normalize(inputs,
         
     return outputs
 
+
+def feedforward(inputs, 
+                num_units=[2048, 512],
+                scope="multihead_attention", 
+                reuse=None):
+    '''Point-wise feed forward net.
+    
+    Args:
+      inputs: A 3d tensor with shape of [N, T, C].
+      num_units: A list of two integers.
+      scope: Optional scope for `variable_scope`.
+      reuse: Boolean, whether to reuse the weights of a previous layer
+        by the same name.
+        
+    Returns:
+      A 3d tensor with the same shape and dtype as inputs
+    '''
+    with tf.variable_scope(scope, reuse=reuse):
+        # Inner layer
+        # params = {"inputs": inputs, "filters": num_units[0], "kernel_size": 1,
+        #           "activation": tf.nn.relu, "use_bias": True}
+        # outputs = tf.layers.conv1d(**params)
+        outputs = tf.layers.dense(inputs, num_units[0], activation=tf.nn.relu)
+        
+        # Readout layer
+        # params = {"inputs": outputs, "filters": num_units[1], "kernel_size": 1,
+        #           "activation": None, "use_bias": True}
+        # outputs = tf.layers.conv1d(**params)
+        outputs = tf.layers.dense(outputs, num_units[1])
+        
+        # Residual connection
+        outputs += inputs
+        
+        # Normalize
+        outputs = normalize(outputs)
+    
+    return outputs
 
 def multihead_attention(queries, 
                         keys, 

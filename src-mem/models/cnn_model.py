@@ -90,21 +90,41 @@ class CNNModel(BaseModel):
     # multi-head attention
     ########################################
 
-    self.orig_ent1 = ent1
-    self.orig_ent2 = ent2
-    self.context = context
+    # self.orig_ent1 = ent1
+    # self.orig_ent2 = ent2
+    # self.context = context
 
-    ent1 = multihead_attention(context, ent1, num_heads=10, scope='att1-0')#, reuse=tf.AUTO_REUSE)
-    ent2 = multihead_attention(context, ent2, num_heads=10, scope='att2-0')#, reuse=tf.AUTO_REUSE)
+    # ent1 = multihead_attention(context, ent1, num_heads=10, scope='att1-0', 
+    #                                     is_training=self.is_train)#, reuse=tf.AUTO_REUSE)
+    # ent2 = multihead_attention(context, ent2, num_heads=10, scope='att2-0',
+    #                                     is_training=self.is_train)#, reuse=tf.AUTO_REUSE)
 
-    self.ent1 = ent1
-    self.ent2 = ent2
+    # self.ent1 = ent1
+    # self.ent2 = ent2
 
-    for i in range(1, hop):
-      ent1 = multihead_attention(context, ent1, num_heads=10, 
-                                                scope='att1%d'%i)#, reuse=tf.AUTO_REUSE)
-      ent2 = multihead_attention(context, ent2, num_heads=10, 
-                                                scope='att2%d'%i)#, reuse=tf.AUTO_REUSE)
+    # for i in range(1, hop):
+    #   ent1 = multihead_attention(context, ent1, num_heads=10, 
+    #                                             scope='att1%d'%i)#, reuse=tf.AUTO_REUSE)
+    #   ent2 = multihead_attention(context, ent2, num_heads=10, 
+    #                                             scope='att2%d'%i)#, reuse=tf.AUTO_REUSE)
+    # ent1 = tf.reduce_max(ent1, axis=1) # (batch, 1, embed)
+    # ent2 = tf.reduce_max(ent2, axis=1)
+    # entities = tf.concat([ent1, ent2], axis=-1)
+    ## entities = tf.squeeze(entities, axis=1)
+
+
+    cont1 = context
+    cont2 = context
+    for i in range(hop):
+      cont1 = multihead_attention(cont1, ent1, num_heads=10, 
+                                    is_training=self.is_train, scope='att1%d'%i)
+      cont2 = multihead_attention(cont2, ent2, num_heads=10, 
+                                    is_training=self.is_train, scope='att2%d'%i)
+      cont1 = feedforward(cont1, num_units=[620, 310], scope='ffd1%d'%i)
+      cont2 = feedforward(cont2, num_units=[620, 310], scope='ffd2%d'%i)
+      ent1 = cont1
+      ent2 = cont2
+
     ent1 = tf.reduce_max(ent1, axis=1) # (batch, 1, embed)
     ent2 = tf.reduce_max(ent2, axis=1)
     entities = tf.concat([ent1, ent2], axis=-1)
