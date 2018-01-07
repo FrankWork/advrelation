@@ -75,139 +75,41 @@ class CNNModel(BaseModel):
     cont_pos1 = tf.nn.embedding_lookup(self.pos1_embed, cont_pos1)
     cont_pos2 = tf.nn.embedding_lookup(self.pos2_embed, cont_pos2)
 
-    # process entities and context
+    # concat pos embedding to entities and context
     context = tf.concat([context, cont_pos1, cont_pos2], axis=2)
     ent1 = tf.concat([ent1_toks, ent1_pos1, ent1_pos2], axis=2)
     ent2 = tf.concat([ent2_toks, ent2_pos1, ent2_pos2], axis=2)
+
     # ent1 = ent1_toks
     # ent2 = ent2_toks
 
     batch = 100
     hop = 3
 
-    
-    ########################################
-    # reduce max attention
-    ########################################
-    ent1 = tf.reduce_max(ent1, axis=1) # (batch, 1, embed)
-    ent2 = tf.reduce_max(ent2, axis=1)
-    entities = tf.concat([ent1, ent2], axis=-1) # (batch, 2*embed)
-    
-    
     ########################################
     # multi-head attention
     ########################################
-    # from tensor2tensor.layers import common_attention
-    # padding = common_attention.embedding_to_padding(x)
-    # attention_bias = common_attention.attention_bias_ignore_padding(padding)
-    # x = common_layers.layer_prepostprocess(
-    #                 None,
-    #                 x,
-    #                 sequence='n',
-    #                 dropout_rate=0.1,
-    #                 norm_type='layer',
-    #                 depth=None,
-    #                 epsilon=1e-6,
-    #                 default_name="layer_prepostprocess")
-    # y = common_attention.multihead_attention(
-    #       query_antecedent = x,
-    #       memory_antecedent = None,
-    #       bias= attention_bias,
-    #       total_key_depth = self.embed_dim,
-    #       total_value_depth = self.embed_dim,
-    #       output_depth = self.embed_dim,
-    #       num_heads = 8,
-    #       dropout_rate = 0.0,
-    #       attention_type="dot_product")
 
+    self.orig_ent1 = ent1
+    self.orig_ent2 = ent2
+    self.context = context
 
-    # ent1 = tf.reduce_mean(ent1, axis=1, keep_dims=True) # (batch, 1, embed)
-    # ent2 = tf.reduce_mean(ent2, axis=1, keep_dims=True)
+    ent1 = multihead_attention(context, ent1, num_heads=10, scope='att1-0')#, reuse=tf.AUTO_REUSE)
+    ent2 = multihead_attention(context, ent2, num_heads=10, scope='att2-0')#, reuse=tf.AUTO_REUSE)
 
-    # hop = 1
-    # for i in range(hop):
-    #   ent1_val = multihead_attention(context, ent1, num_heads=10, 
-    #                                             scope='att1%d'%i)#, reuse=tf.AUTO_REUSE)
-    #   ent2_val = multihead_attention(context, ent2, num_heads=10, 
-    #                                             scope='att2%d'%i)#, reuse=tf.AUTO_REUSE)
+    self.ent1 = ent1
+    self.ent2 = ent2
 
-    #   ent1 = tf.reduce_mean(ent1_val, axis=1, keep_dims=True) # (batch, 1, embed)
-    #   ent2 = tf.reduce_mean(ent2_val, axis=1, keep_dims=True)
-
-    # entities = tf.concat([ent1, ent2], axis=-1)
+    for i in range(1, hop):
+      ent1 = multihead_attention(context, ent1, num_heads=10, 
+                                                scope='att1%d'%i)#, reuse=tf.AUTO_REUSE)
+      ent2 = multihead_attention(context, ent2, num_heads=10, 
+                                                scope='att2%d'%i)#, reuse=tf.AUTO_REUSE)
+    ent1 = tf.reduce_max(ent1, axis=1) # (batch, 1, embed)
+    ent2 = tf.reduce_max(ent2, axis=1)
+    entities = tf.concat([ent1, ent2], axis=-1)
     # entities = tf.squeeze(entities, axis=1)
     
-
-    ########################################
-    # input attention
-    ########################################
-    # def attention_fn(x, ent):
-    #   ''' dot product attention
-    #   Args
-    #     x:   [batch, len, d]
-    #     ent: [batch, d] => [batch, d, 1]
-    #   Returns:
-    #     value: [batch, d]
-    #   '''
-    #   logits = tf.matmul(x, tf.expand_dims(ent, -1))# [batch, len, 1]
-    #   weights = tf.nn.softmax(logits, dim=1)
-    #   weighted_x = tf.multiply(x, weights) # [batch, len, d]
-    #   return tf.reduce_sum(weighted_x, axis=1) # [batch, d]
-    
-    # for _ in range(hop):
-    #   ent1 = attention_fn(context, ent1)
-    #   ent2 = attention_fn(context, ent2)
-      
-    #   ent1_proj = tf.layers.dense(ent1, self.embed_dim)
-    #   ent2_proj = tf.layers.dense(ent2, self.embed_dim)
-
-    #   ent1 = ent1 + ent1_proj
-    #   ent2 = ent2 + ent1_proj
-
-    # entities = tf.concat([ent1, ent2], axis=-1)
-
-
-    ########################################
-    # conv attention
-    ########################################
-    # ent1 = conv_block_v2(ent1, 3, 310, 'conv-ent1', training=self.is_train)
-    # ent1 = tf.layers.max_pooling1d(ent1, MAX_LEN, MAX_LEN, padding='same')
-
-    # ent2 = conv_block_v2(ent2, 3, 310, 'conv-ent2', training=self.is_train)
-    # ent2 = tf.layers.max_pooling1d(ent2, MAX_LEN, MAX_LEN, padding='same')
-
-    # entities = tf.concat([ent1, ent2], axis=-1)
-    # entities = tf.squeeze(entities, axis=1)
-
-
-    
-    ########################################
-    # word attention
-    ########################################
-    # self.w_att = tf.get_variable('w_att', [3*self.embed_dim, 1])
-    # self.b_att = tf.get_variable('b_att', [1])
-
-    # shape = tf.ones_like(tf.concat([context, context], axis=-1))
-    
-    # for _ in range(hop):
-    #   e3d = tf.expand_dims(entities, axis=1) # (batch, 1, 2*d)
-    #   e_tile = shape * e3d
-    #   x3d = tf.concat([e_tile, context], axis=-1) # (batch, len, 3d)
-
-    #   w3d = tf.tile(tf.expand_dims(self.w_att, axis=0), [batch, 1, 1])# (batch, 3d, 1)
-    #   g = tf.nn.tanh(tf.nn.xw_plus_b(x3d, w3d, self.b_att)) #(batch, len, 1)
-
-    #   alpha = tf.nn.softmax(tf.squeeze(g)) # (batch, len)
-    #   alpha = tf.expand_dims(alpha, axis=-1)
-    #   att_out = tf.reduce_sum(alpha * context, axis=1) # (batch, d)
-
-    #   linear_out = tf.layers.dense(entities, self.embed_dim)
-    #   linear_out = tf.nn.relu(linear_out)
-
-    #   entities = tf.concat([linear_out, att_out], axis=1)
-    #   entities.set_shape([None, 2*310])
-
-    # entities = tf.layers.dropout(entities, 1-FLAGS.keep_prob, training=self.is_train)
     return entities, label
 
   def top(self, body_out, labels):
