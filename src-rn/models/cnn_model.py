@@ -107,7 +107,8 @@ class CNNModel(BaseModel):
     sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
     conv_out = self.conv_shallow(sent_pos)
 
-    body_out = tf.concat([lexical, conv_out], axis=1)
+    # body_out = tf.concat([lexical, conv_out], axis=1)
+    body_out = conv_out
     
     body_out = tf.layers.dropout(body_out, FLAGS.dropout_rate, training=self.is_train)
     return body_out
@@ -127,8 +128,8 @@ class CNNModel(BaseModel):
       ent1 = cont1
       ent2 = cont2
 
-    ent1 = tf.reduce_max(ent1, axis=1) # (batch, embed)
-    ent2 = tf.reduce_max(ent2, axis=1)
+    ent1 = tf.reduce_mean(ent1, axis=1) # (batch, embed)
+    ent2 = tf.reduce_mean(ent2, axis=1)
     entities = tf.concat([ent1, ent2], axis=-1)
     # entities = tf.squeeze(entities, axis=1)
     
