@@ -82,42 +82,89 @@ class CNNModel(BaseModel):
     # ent1 = ent1_toks
     # ent2 = ent2_toks
 
-    ent1 = tf.reduce_mean(ent1, axis=1) # (batch, embed)
-    ent2 = tf.reduce_mean(ent2, axis=1)
-
-    # entities = tf.concat([ent1, ent2], axis=-1) # (batch, 2*embed)
-    
     batch = 100
     hop = 3
+
+    
+    ########################################
+    # reduce max attention
+    ########################################
+    ent1 = tf.reduce_max(ent1, axis=1) # (batch, 1, embed)
+    ent2 = tf.reduce_max(ent2, axis=1)
+    entities = tf.concat([ent1, ent2], axis=-1) # (batch, 2*embed)
+    
+    
+    ########################################
+    # multi-head attention
+    ########################################
+    # from tensor2tensor.layers import common_attention
+    # padding = common_attention.embedding_to_padding(x)
+    # attention_bias = common_attention.attention_bias_ignore_padding(padding)
+    # x = common_layers.layer_prepostprocess(
+    #                 None,
+    #                 x,
+    #                 sequence='n',
+    #                 dropout_rate=0.1,
+    #                 norm_type='layer',
+    #                 depth=None,
+    #                 epsilon=1e-6,
+    #                 default_name="layer_prepostprocess")
+    # y = common_attention.multihead_attention(
+    #       query_antecedent = x,
+    #       memory_antecedent = None,
+    #       bias= attention_bias,
+    #       total_key_depth = self.embed_dim,
+    #       total_value_depth = self.embed_dim,
+    #       output_depth = self.embed_dim,
+    #       num_heads = 8,
+    #       dropout_rate = 0.0,
+    #       attention_type="dot_product")
+
+
+    # ent1 = tf.reduce_mean(ent1, axis=1, keep_dims=True) # (batch, 1, embed)
+    # ent2 = tf.reduce_mean(ent2, axis=1, keep_dims=True)
+
+    # hop = 1
+    # for i in range(hop):
+    #   ent1_val = multihead_attention(context, ent1, num_heads=10, 
+    #                                             scope='att1%d'%i)#, reuse=tf.AUTO_REUSE)
+    #   ent2_val = multihead_attention(context, ent2, num_heads=10, 
+    #                                             scope='att2%d'%i)#, reuse=tf.AUTO_REUSE)
+
+    #   ent1 = tf.reduce_mean(ent1_val, axis=1, keep_dims=True) # (batch, 1, embed)
+    #   ent2 = tf.reduce_mean(ent2_val, axis=1, keep_dims=True)
+
+    # entities = tf.concat([ent1, ent2], axis=-1)
+    # entities = tf.squeeze(entities, axis=1)
+    
 
     ########################################
     # input attention
     ########################################
-    def attention_fn(x, ent):
-      ''' dot product attention
-      Args
-        x:   [batch, len, d]
-        ent: [batch, d] => [batch, d, 1]
-      Returns:
-        value: [batch, d]
-      '''
-      logits = tf.matmul(x, tf.expand_dims(ent, -1))# [batch, len, 1]
-      weights = tf.nn.softmax(logits, dim=1)
-      weighted_x = tf.multiply(x, weights) # [batch, len, d]
-      return tf.reduce_sum(weighted_x, axis=1) # [batch, d]
+    # def attention_fn(x, ent):
+    #   ''' dot product attention
+    #   Args
+    #     x:   [batch, len, d]
+    #     ent: [batch, d] => [batch, d, 1]
+    #   Returns:
+    #     value: [batch, d]
+    #   '''
+    #   logits = tf.matmul(x, tf.expand_dims(ent, -1))# [batch, len, 1]
+    #   weights = tf.nn.softmax(logits, dim=1)
+    #   weighted_x = tf.multiply(x, weights) # [batch, len, d]
+    #   return tf.reduce_sum(weighted_x, axis=1) # [batch, d]
     
-    for _ in range(hop):
-      ent1 = attention_fn(context, ent1)
-      ent2 = attention_fn(context, ent2)
+    # for _ in range(hop):
+    #   ent1 = attention_fn(context, ent1)
+    #   ent2 = attention_fn(context, ent2)
       
-      ent1_proj = tf.layers.dense(ent1, self.embed_dim)
-      ent2_proj = tf.layers.dense(ent2, self.embed_dim)
+    #   ent1_proj = tf.layers.dense(ent1, self.embed_dim)
+    #   ent2_proj = tf.layers.dense(ent2, self.embed_dim)
 
-      ent1 = ent1 + ent1_proj
-      ent2 = ent2 + ent1_proj
+    #   ent1 = ent1 + ent1_proj
+    #   ent2 = ent2 + ent1_proj
 
-    entities = tf.concat([ent1, ent2], axis=-1)
-    # entities.set_shape([None, 2*310])
+    # entities = tf.concat([ent1, ent2], axis=-1)
 
 
     ########################################
@@ -168,8 +215,10 @@ class CNNModel(BaseModel):
 
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
+      one_hot = tf.one_hot(labels, NUM_CLASSES)
+      # one_hot = label_smoothing(one_hot)
       cross_entropy = tf.losses.softmax_cross_entropy(logits=logits, 
-                           onehot_labels=tf.one_hot(labels, NUM_CLASSES))
+                           onehot_labels=one_hot)
 
       regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
       loss = cross_entropy + sum(regularization_losses)
