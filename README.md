@@ -10,6 +10,7 @@
 - focal loss
 - scaled softmax, scaled attention
 - relation net
+- binary
 
 ## src
 
