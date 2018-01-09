@@ -1,16 +1,20 @@
 import tensorflow as tf
 
 
-def scale_l2(x, norm_length=5):
-  # shape(x) = (batch, num_timesteps, d)
-  # Divide x by max(abs(x)) for a numerically stable L2 norm.
-  # 2norm(x) = a * 2norm(x/a)
-  # Scale over the full sequence, dims (1, 2)
-  alpha = tf.reduce_max(tf.abs(x), (1, 2), keep_dims=True) + 1e-12
-  l2_norm = alpha * tf.sqrt(
-      tf.reduce_sum(tf.pow(x / alpha, 2), (1, 2), keep_dims=True) + 1e-6)
-  x_unit = x / l2_norm
-  return norm_length * x_unit
+# def scale_l2(x, eps=1e-3):
+#   # shape(x) = (batch, num_timesteps, d)
+#   # Divide x by max(abs(x)) for a numerically stable L2 norm.
+#   # 2norm(x) = a * 2norm(x/a)
+#   # Scale over the full sequence, dims (1, 2)
+#   alpha = tf.reduce_max(tf.abs(x), (1, 2), keep_dims=True) + 1e-12
+#   l2_norm = alpha * tf.sqrt(
+#       tf.reduce_sum(tf.pow(x / alpha, 2), (1, 2), keep_dims=True) + 1e-6)
+#   x_unit = x / l2_norm
+#   return eps * x_unit
+
+def scale_l2(x, eps=1e-3):
+    # scale over the full batch
+    return eps * tf.nn.l2_normalize(x, dim=[0, 1, 2])
 
 def mask_by_length(t, length):
   """Mask t, 3-D [batch, time, dim], by length, 1-D [batch,]."""
@@ -36,22 +40,17 @@ def normalize_embed(self, emb, vocab_freqs):
     stddev = tf.sqrt(1e-6 + var)
     return (emb - mean) / stddev
 
-def adv_example(self, input, loss):
+def adv_example(inputs, loss):
     grad, = tf.gradients(
         loss,
-        input,
+        inputs,
         aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
     grad = tf.stop_gradient(grad)
     perturb = scale_l2(grad)
-    return input + perturb
 
-def adversarial_loss(self, loss, lexical, sentence, pos1, pos2, labels):
-    adv_lexical = self.adv_example(lexical, loss)
-    adv_sentence = self.adv_example(sentence, loss)
-    _, loss = self.xentropy_logits_and_loss(adv_lexical, adv_sentence, pos1, pos2, labels)
-    return loss
+    return inputs + perturb
 
-def kl_divergence_with_logits(self, q_logit, p_logit):
+def kl_divergence_with_logits(q_logit, p_logit):
     # https://github.com/takerum/vat_tf
     q = tf.nn.softmax(q_logit)
     qlogq = tf.reduce_mean(tf.reduce_sum(q * logsoftmax(q_logit), 1))
@@ -59,34 +58,29 @@ def kl_divergence_with_logits(self, q_logit, p_logit):
     kl = qlogq - qlogp
     return kl
 
-def virtual_adversarial_loss(self, logits, lexical, length, sentence, pos1, pos2):
+def virtual_adversarial_loss(logits, length, sentence, pos1, pos2, logits_fn,
+                             lexical=None, num_iter=1, small_coef=1e-6):
     # Stop gradient of logits. See https://arxiv.org/abs/1507.00677 for details.
     logits = tf.stop_gradient(logits)
 
     # Initialize perturbation with random noise.
     d_sent = tf.random_normal(shape=tf.shape(sentence))
-    d_lex = tf.random_normal(shape=tf.shape(lexical))
 
     # Perform finite difference method and power iteration.
     # See Eq.(8) in the paper http://arxiv.org/pdf/1507.00677.pdf,
     # Adding small noise to input and taking gradient with respect to the noise
     # corresponds to 1 power iteration.
     agg_method = tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N
-    for _ in range(NUM_POWER_ITER):
-      d_sent = scale_l2(mask_by_length(d_sent, length), SMALL_CONSTANT) 
-      d_lex = scale_l2(d_lex, SMALL_CONSTANT)
+    for _ in range(num_iter):
+      d_sent = scale_l2(mask_by_length(d_sent, length), small_coef) 
       vadv_sent = sentence + d_sent
-      vadv_lex = lexical + d_lex
-      d_logits, _ = self.xentropy_logits_and_loss(vadv_lex, vadv_sent, pos1, pos2, None)
+      d_logits = logits_fn(vadv_sent, pos1, pos2)
 
-      kl = self.kl_divergence_with_logits(logits, d_logits)
+      kl = kl_divergence_with_logits(logits, d_logits)
       d_sent, = tf.gradients(kl, d_sent, aggregation_method=agg_method)
       d_sent = tf.stop_gradient(d_sent)
-      d_lex, = tf.gradients(kl, d_lex, aggregation_method=agg_method)
-      d_lex = tf.stop_gradient(d_lex)
 
     vadv_sent = sentence + scale_l2(d_sent)
-    vadv_lex = lexical + scale_l2(d_lex)
-    vadv_logits, _ = self.xentropy_logits_and_loss(vadv_lex, vadv_sent, pos1, pos2, None)
+    vadv_logits = logits_fn(vadv_sent, pos1, pos2)
 
-    return self.kl_divergence_with_logits(logits, vadv_logits)
+    return kl_divergence_with_logits(logits, vadv_logits)

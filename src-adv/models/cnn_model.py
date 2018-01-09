@@ -1,8 +1,8 @@
 import tensorflow as tf
 from models.base_model import * 
+from models.adv import *
 
 flags = tf.app.flags
-
 
 flags.DEFINE_integer("pos_num", 123, "number of position feature")
 flags.DEFINE_integer("pos_dim", 5, "position embedding size")
@@ -15,8 +15,6 @@ FLAGS = flags.FLAGS
 
 MAX_LEN = 98
 NUM_CLASSES = 19
-NUM_POWER_ITER = 1
-SMALL_CONSTANT = 1e-6
 KERNEL_SIZE = 3
 NUM_FILTERS = 310
 
@@ -81,19 +79,17 @@ class CNNModel(BaseModel):
     pool_out = tf.squeeze(pool_out, axis=1)
     return pool_out
 
-  def body(self, sentence, pos1, pos2, lexical):
-    sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
+  def compute_logits(self, sentence, pos1, pos2, lexical=None, regularizer=None):
     sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
     conv_out = self.conv_shallow(sent_pos)
 
-    body_out = tf.concat([lexical, conv_out], axis=1)
-    
-    body_out = tf.layers.dropout(body_out, FLAGS.dropout_rate, training=self.is_train)
-    return body_out
+    conv_out = tf.layers.dropout(conv_out, FLAGS.dropout_rate, training=self.is_train)
 
-  def top(self, body_out, labels):
-    logits = tf.layers.dense(body_out, NUM_CLASSES, kernel_regularizer=self.regularizer)
+    logits = tf.layers.dense(conv_out, NUM_CLASSES, name='out_dense',
+                        kernel_regularizer=regularizer, reuse=tf.AUTO_REUSE)
+    return logits
 
+  def compute_xentropy_loss(self, logits, labels):
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
       one_hot = tf.one_hot(labels, NUM_CLASSES)
@@ -101,30 +97,40 @@ class CNNModel(BaseModel):
       cross_entropy = tf.losses.softmax_cross_entropy(logits=logits, 
                            onehot_labels=one_hot)
 
-      regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-      loss = cross_entropy + sum(regularization_losses)
-
-    return logits, loss
+    return cross_entropy
   
   def build_semeval_graph(self, data):
     lexical, labels, length, sentence, pos1, pos2 = self.bottom(data)
+    sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
 
-    # logits, loss = self.xentropy_logits_and_loss(lexical, sentence, pos1, pos2, labels)
-    # adv_loss = self.adversarial_loss(loss, lexical, sentence, pos1, pos2, labels)
-    # vadv_loss = self.virtual_adversarial_loss(logits, lexical, length, sentence, pos1, pos2)
-    # losses = loss #+ 0.01*adv_loss + 0.01 * vadv_loss
+    # cross entropy loss
+    logits = self.compute_logits(sentence, pos1, pos2, regularizer=None)#self.regularizer)
+    loss_xent = self.compute_xentropy_loss(logits, labels)
 
-    body_out = self.body(sentence, pos1, pos2, lexical)
-    logits, loss = self.top(body_out, labels)
+    # adv loss
+    adv_sentence = adv_example(sentence, loss_xent)
+    adv_logits = self.compute_logits(adv_sentence, pos1, pos2)
+    loss_adv = self.compute_xentropy_loss(adv_logits, labels)
 
+    # vadv loss
+    loss_vadv = virtual_adversarial_loss(logits, length, sentence, pos1, pos2, self.compute_logits)
+
+    # l2 loss
+    regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    loss_l2 = sum(regularization_losses)
+    
     # Accuracy
     with tf.name_scope("accuracy"):
       pred = tf.argmax(logits, axis=1)
       acc = tf.cast(tf.equal(pred, labels), tf.float32)
       acc = tf.reduce_mean(acc)
 
+    # for t in tf.trainable_variables():
+    #   print(t.op.name)
+    # exit()
+
     self.tensors['acc'] = acc
-    self.tensors['loss'] = loss
+    self.tensors['loss'] = loss_xent + loss_adv + loss_vadv #loss_l2
     self.tensors['pred'] = pred
 
   def build_train_op(self):

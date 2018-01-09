@@ -4,13 +4,14 @@
 
 ## Candidate Methods
 
-- attention context, use the official tensor2tensor's multihead attention implementation
-- attention pooling
-- adversarial, vadv unsurpervised
-- focal loss
-- scaled softmax, scaled attention
-- relation net
-- binary
+- relation net; ProjE; entity, relation description
+
+- attention context, tensor2tensor
+- adversarial, vadv unsurpervised, norm clip
+- focal loss, scaled softmax
+- binary classification
+- Subword token
+- redifine position distance
 
 ## src
 

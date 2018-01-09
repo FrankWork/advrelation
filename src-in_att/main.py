@@ -37,8 +37,8 @@ def build_data():
 
   def _trim_embed():
     print('trimming pretrained embeddings')
-    util.trim_embeddings(50)
-    util.trim_embeddings(300)
+    # util.trim_embeddings(50)
+    # util.trim_embeddings(300)
 
   print('load raw data')
   semeval_train, semeval_test = semeval.load_raw_data(verbose=True)
@@ -48,7 +48,7 @@ def build_data():
 
   _build_data(semeval_train, semeval_test)
 
-  _trim_embed()
+  # _trim_embed()
 
 def train_semeval(sess, m_train, m_valid, semeval_test_iter):
   best_acc, best_epoch = 0., 0
@@ -145,6 +145,10 @@ def main(_):
     with tf.Session(config=config) as sess:
       sess.run(init_op)
       print('='*80)
+
+      # for tensor in sess.run([m_train.orig_ent1, m_train.orig_ent2, m_train.context, m_train.ent1, m_train.ent2]):
+      #   print(tensor.shape)
+      # exit()
 
       if FLAGS.is_test:
         test(sess, m_valid, semeval_test_iter)

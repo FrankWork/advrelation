@@ -124,39 +124,6 @@ def _map_tokens_and_pad(raw_example, vocab2id):
   raw_example['sentence'] = sentence
   # raw_example['sentence'] = util.pad_or_truncate(sentence, FLAGS.semeval_max_len)
 
-def _lexical_feature(raw_example):
-  def _entity_context(e_idx, sent):
-    ''' return [w(e-1), w(e), w(e+1)]
-    '''
-    context = []
-    n = len(sent)
-    if e_idx >= n:
-      e_idx = n-1
-    context.append(sent[e_idx])
-
-    if e_idx >= 1:
-      context.append(sent[e_idx-1])
-    else:
-      context.append(sent[e_idx])
-    
-    if e_idx < len(sent)-1:
-      context.append(sent[e_idx+1])
-    else:
-      context.append(sent[e_idx])
-    
-    return context
-
-    
-  e1_idx = raw_example['entity1'].first
-  e2_idx = raw_example['entity2'].first
-
-  context1 = _entity_context(e1_idx, raw_example['sentence'])
-  context2 = _entity_context(e2_idx, raw_example['sentence'])
-
-  # ignore WordNet hypernyms in paper
-  lexical = context1 + context2
-  return lexical
-
 def _position_feature(raw_example):
   e1_idx = raw_example['entity1'].first
   e2_idx = raw_example['entity2'].first
@@ -183,9 +150,6 @@ def _build_sequence_example(raw_example):
   '''
   ex = tf.train.SequenceExample()
 
-  lexical = _lexical_feature(raw_example)
-  ex.context.feature['lexical'].int64_list.value.extend(lexical)
-
   label = raw_example['label']
   ex.context.feature['label'].int64_list.value.append(label)
 
@@ -196,13 +160,55 @@ def _build_sequence_example(raw_example):
     word = ex.feature_lists.feature_list['sentence'].feature.add()
     word.int64_list.value.append(word_id)
   
+  # relative distance from entity1, entity2
   position1, position2 = _position_feature(raw_example)
-  for pos_val in position1:
+  for pos_id in position1:
     pos = ex.feature_lists.feature_list['position1'].feature.add()
-    pos.int64_list.value.append(pos_val)
-  for pos_val in position2:
+    pos.int64_list.value.append(pos_id)
+  for pos_id in position2:
     pos = ex.feature_lists.feature_list['position2'].feature.add()
-    pos.int64_list.value.append(pos_val)
+    pos.int64_list.value.append(pos_id)
+
+  entity1 = raw_example['entity1']
+  for word_id in sentence[entity1.first : entity1.last+1]:
+    word = ex.feature_lists.feature_list['ent1_toks'].feature.add()
+    word.int64_list.value.append(word_id)
+  for pos_id in position1[entity1.first : entity1.last+1]:
+    word = ex.feature_lists.feature_list['ent1_pos1'].feature.add()
+    word.int64_list.value.append(pos_id)
+  for pos_id in position2[entity1.first : entity1.last+1]:
+    word = ex.feature_lists.feature_list['ent1_pos2'].feature.add()
+    word.int64_list.value.append(pos_id)
+
+  entity2 = raw_example['entity2']
+  for word_id in sentence[entity2.first : entity2.last+1]:
+    word = ex.feature_lists.feature_list['ent2_toks'].feature.add()
+    word.int64_list.value.append(word_id)
+  for pos_id in position1[entity2.first : entity2.last+1]:
+    word = ex.feature_lists.feature_list['ent2_pos1'].feature.add()
+    word.int64_list.value.append(pos_id)
+  for pos_id in position2[entity2.first : entity2.last+1]:
+    word = ex.feature_lists.feature_list['ent2_pos2'].feature.add()
+    word.int64_list.value.append(pos_id)
+  
+  context = sentence[:entity1.first] + \
+            sentence[entity1.last+1:entity2.first] + \
+            sentence[entity2.last+1:]
+  for word_id in context:
+    word = ex.feature_lists.feature_list['context'].feature.add()
+    word.int64_list.value.append(word_id)
+  cont_pos1 = position1[:entity1.first] + \
+            position1[entity1.last+1:entity2.first] + \
+            position1[entity2.last+1:]
+  for word_id in cont_pos1:
+    word = ex.feature_lists.feature_list['cont_pos1'].feature.add()
+    word.int64_list.value.append(word_id)
+  cont_pos2 = position2[:entity1.first] + \
+            position2[entity1.last+1:entity2.first] + \
+            position2[entity2.last+1:]
+  for word_id in cont_pos2:
+    word = ex.feature_lists.feature_list['cont_pos2'].feature.add()
+    word.int64_list.value.append(word_id)
 
   return ex
 
@@ -228,38 +234,72 @@ def _parse_tfexample(serialized_example):
   sequence features: sentence, position1, position2
   '''
   context_features={
-                      'lexical'   : tf.FixedLenFeature([6], tf.int64),
                       'label'    : tf.FixedLenFeature([], tf.int64),
                       'length'    : tf.FixedLenFeature([], tf.int64)}
   sequence_features={
                       'sentence' : tf.FixedLenSequenceFeature([], tf.int64),
                       'position1'  : tf.FixedLenSequenceFeature([], tf.int64),
-                      'position2'  : tf.FixedLenSequenceFeature([], tf.int64)}
+                      'position2'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      
+                      'ent1_toks'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      'ent1_pos1'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      'ent1_pos2'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      
+                      'ent2_toks'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      'ent2_pos1'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      'ent2_pos2'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      
+                      'context'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      'cont_pos1'  : tf.FixedLenSequenceFeature([], tf.int64),
+                      'cont_pos2'  : tf.FixedLenSequenceFeature([], tf.int64),}
   context_dict, sequence_dict = tf.parse_single_sequence_example(
                       serialized_example,
                       context_features   = context_features,
                       sequence_features  = sequence_features)
-
-  sentence = sequence_dict['sentence']
-  position1 = sequence_dict['position1']
-  position2 = sequence_dict['position2']
-
-  lexical = context_dict['lexical']
+  
   label = context_dict['label']
   length = context_dict['length']
 
-  return lexical, label, length, sentence, position1, position2
+  sentence  = sequence_dict['sentence']
+  position1 = sequence_dict['position1']
+  position2 = sequence_dict['position2']
+
+  ent1_toks = sequence_dict['ent1_toks']
+  ent1_pos1 = sequence_dict['ent1_pos1']
+  ent1_pos2 = sequence_dict['ent1_pos2']
+
+  ent2_toks = sequence_dict['ent2_toks']
+  ent2_pos1 = sequence_dict['ent2_pos1']
+  ent2_pos2 = sequence_dict['ent2_pos2']
+
+  context   = sequence_dict['context']
+  cont_pos1 = sequence_dict['cont_pos1']
+  cont_pos2 = sequence_dict['cont_pos2']
+
+  return (label, length, 
+         sentence, position1, position2, 
+         ent1_toks, ent1_pos1, ent1_pos2,
+         ent2_toks, ent2_pos1, ent2_pos2,
+         context, cont_pos1, cont_pos2)
 
 def read_tfrecord(epoch, batch_size):
+  padded_shapes = ([], [], 
+                  [None], [None], [None], 
+                  [None], [None], [None], 
+                  [None], [None], [None],
+                  [None], [None], [None])
+
   train_data = util.read_tfrecord(FLAGS.semeval_train_record, 
                               epoch, 
                               batch_size, 
                               _parse_tfexample,
+                              padded_shapes,
                               shuffle=True)
   test_data = util.read_tfrecord(FLAGS.semeval_test_record, 
                               epoch, 
                               batch_size, 
                               _parse_tfexample,
+                              padded_shapes,
                               shuffle=False)
 
   return train_data, test_data

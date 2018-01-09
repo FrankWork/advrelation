@@ -242,7 +242,7 @@ def write_as_tfrecord(raw_data, vocab2id, filename, map_func, build_func):
   # text_writer.close()
   del raw_data
 
-def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
+def read_tfrecord(filename, epoch, batch_size, parse_func, padded_shapes, shuffle=True):
   '''read TFRecord file to get batch tensors for tensorflow models
 
   Returns:
@@ -256,7 +256,6 @@ def read_tfrecord(filename, epoch, batch_size, parse_func, shuffle=True):
     if shuffle:
       dataset = dataset.shuffle(buffer_size=1000)
     
-    padded_shapes = ([None,], [], [], [None], [None], [None])
     dataset = dataset.padded_batch(batch_size, padded_shapes)
     # dataset = dataset.batch(batch_size)
     

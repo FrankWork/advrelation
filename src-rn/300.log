@@ -1,0 +1,84 @@
+$ cnn embedding 300
+
+Done training, best_epoch: 48, best_acc: 0.7929
+duration: 0.10 hours
+
+acc 79.50 f1 83.71 
+
+Done training, best_epoch: 48, best_acc: 0.7929
+duration: 0.10 hours
+f1 83.5 
+
+Done training, best_epoch: 32, best_acc: 0.7918
+duration: 0.15 hours
+
+
+
+$ deep cnn
+
+Epoch 0 sem 2.44 0.30 0.5029 time 6.15
+Epoch 1 sem 1.64 0.57 0.6661 time 4.81
+Epoch 2 sem 1.34 0.65 0.6879 time 4.52
+Epoch 3 sem 1.16 0.70 0.7157 time 4.44
+Epoch 4 sem 1.08 0.71 0.7525 time 4.43
+Epoch 5 sem 0.98 0.74 0.7643 time 4.63
+Epoch 6 sem 0.92 0.76 0.7600 time 4.17
+Epoch 7 sem 0.87 0.77 0.7661 time 4.33
+Epoch 8 sem 0.81 0.77 0.7704 time 4.53
+Epoch 9 sem 0.77 0.79 0.7707 time 4.54
+Epoch 10 sem 0.75 0.80 0.7725 time 4.65
+Epoch 11 sem 0.69 0.81 0.7843 time 4.62
+Epoch 12 sem 0.67 0.82 0.7729 time 4.73
+Epoch 13 sem 0.64 0.82 0.7946 time 4.29
+Epoch 14 sem 0.62 0.83 0.7854 time 4.54
+Epoch 15 sem 0.57 0.84 0.7843 time 4.37
+Epoch 16 sem 0.56 0.84 0.7786 time 4.32
+Epoch 17 sem 0.53 0.85 0.7968 time 4.28
+Epoch 18 sem 0.49 0.86 0.8014 time 4.48
+Epoch 19 sem 0.48 0.86 0.7775 time 4.37
+Epoch 20 sem 0.46 0.87 0.7904 time 4.32
+Epoch 21 sem 0.43 0.88 0.7707 time 4.35
+Epoch 22 sem 0.41 0.89 0.7939 time 4.28
+Epoch 23 sem 0.39 0.89 0.7786 time 4.25
+Epoch 24 sem 0.38 0.89 0.7646 time 4.43
+Epoch 25 sem 0.37 0.90 0.7871 time 4.40
+Epoch 26 sem 0.34 0.91 0.8011 time 4.32
+Epoch 27 sem 0.33 0.91 0.7904 time 4.30
+Epoch 28 sem 0.32 0.91 0.7725 time 4.28
+Epoch 29 sem 0.30 0.92 0.7832 time 4.37
+Epoch 30 sem 0.29 0.93 0.7832 time 4.38
+Epoch 31 sem 0.28 0.93 0.7954 time 4.26
+Epoch 32 sem 0.28 0.92 0.7900 time 3.52
+Epoch 33 sem 0.27 0.93 0.7861 time 2.95
+Epoch 34 sem 0.25 0.93 0.7875 time 2.82
+Epoch 35 sem 0.24 0.94 0.7946 time 2.56
+Epoch 36 sem 0.24 0.94 0.7907 time 2.56
+Epoch 37 sem 0.23 0.94 0.7832 time 2.59
+Epoch 38 sem 0.22 0.95 0.7896 time 2.56
+Epoch 39 sem 0.21 0.95 0.7925 time 2.58
+Epoch 40 sem 0.21 0.95 0.7882 time 2.55
+Epoch 41 sem 0.20 0.95 0.7943 time 2.56
+Epoch 42 sem 0.19 0.95 0.8000 time 2.54
+Epoch 43 sem 0.20 0.95 0.7993 time 2.48
+Epoch 44 sem 0.18 0.96 0.7954 time 2.54
+Epoch 45 sem 0.18 0.96 0.7968 time 2.59
+Epoch 46 sem 0.17 0.96 0.7925 time 2.54
+Epoch 47 sem 0.18 0.96 0.7971 time 2.48
+Epoch 48 sem 0.17 0.96 0.7968 time 2.50
+Epoch 49 sem 0.16 0.96 0.7893 time 2.45
+Done training, best_epoch: 18, best_acc: 0.8014
+duration: 0.05 hours
+
+
+$ 1 cnn_block 
+100 filters 0.79
+310 filters 0.7961
+
+$ 2 cnn_block + drop_out 
+310 filters 0.7936 0.7961 0.7968
+
+$ 3 cnn_block 
+0.7929 0.7914 0.7968 0.7943 0.8014 
+batch norm: 0.7950
+no batch norm: 0.7961
+pad residual: 0.80

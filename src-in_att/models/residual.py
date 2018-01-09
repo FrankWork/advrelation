@@ -210,7 +210,7 @@ def block_layer(inputs, filters, block_fn, blocks, strides, is_training, name,
   return tf.identity(inputs, name)
 
 
-def residual_net(inputs, length, filters, is_training, num_classes, resnet_size=8, 
+def residual_net(inputs, length, filters, is_training, resnet_size=8, 
                                                 data_format='channels_last'):
   """ResNet v2 models.
 
