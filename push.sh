@@ -10,8 +10,5 @@ rsync -avh --delete --exclude=saved_models/  \
            --exclude=embed300.google.npy \
            --exclude=google_embed300.npy.tar.gz \
            --exclude=google_words.lst \
-           --exclude=aclImdb/ \
-           --exclude=aclImdb_v1.tar.gz \
            --exclude=data/generated/ \
-           --exclude=data/ \
       ./ $server

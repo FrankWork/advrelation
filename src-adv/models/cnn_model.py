@@ -9,7 +9,7 @@ flags = tf.app.flags
 flags.DEFINE_integer("pos_num", 123, "number of position feature")
 flags.DEFINE_integer("pos_dim", 5, "position embedding size")
 flags.DEFINE_integer("num_hops", 1, "hop numbers of entity attention")
-flags.DEFINE_float("l2_coef", 0.01, "l2 loss coefficient")
+flags.DEFINE_float("l2_coef", 0.001, "l2 loss coefficient")
 flags.DEFINE_float("dropout_rate", 0.5, "dropout probability")
 flags.DEFINE_float("lrn_rate", 0.001, "learning rate")
 
@@ -18,7 +18,7 @@ FLAGS = flags.FLAGS
 MAX_LEN = 98
 NUM_CLASSES = 19
 KERNEL_SIZE = 3
-NUM_FILTERS = 310
+NUM_FILTERS = 320
 
 class CNNModel(BaseModel):
 
@@ -110,7 +110,7 @@ class CNNModel(BaseModel):
     sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
 
     # cross entropy loss
-    logits = self.compute_logits(sentence, pos1, pos2, regularizer=None)#self.regularizer)
+    logits = self.compute_logits(sentence, pos1, pos2, regularizer=self.regularizer)
     loss_xent = self.compute_xentropy_loss(logits, labels)
 
     # adv loss
@@ -124,6 +124,10 @@ class CNNModel(BaseModel):
     # l2 loss
     regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
     loss_l2 = sum(regularization_losses)
+    # l2_losses = []
+    # for var in tf.trainable_variables():
+    #   l2_losses.append(tf.nn.l2_loss(var))
+    # loss_l2 = FLAGS.l2_coef*sum(l2_losses)
     
     # Accuracy
     with tf.name_scope("accuracy"):
@@ -136,14 +140,14 @@ class CNNModel(BaseModel):
     # exit()
 
     self.tensors['acc'] = acc
-    self.tensors['loss'] = loss_xent + loss_adv + loss_vadv #loss_l2
+    self.tensors['loss'] = loss_xent + loss_adv + loss_vadv + loss_l2
     self.tensors['pred'] = pred
 
   def build_train_op(self):
     if self.is_train:
       # self.train_op = tf.no_op()
       loss = self.tensors['loss']
-      self.train_op = optimize(loss, FLAGS.lrn_rate)
+      self.train_op = optimize(loss, FLAGS.lrn_rate, decay_steps=None)
 
 
 def build_train_valid_model(model_name, word_embed, vocab_freq,
