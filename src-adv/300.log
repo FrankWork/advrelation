@@ -123,6 +123,9 @@ duration: 0.06 hours
 acc 0.8000 f1 84.11
 acc 0.8021 f1 84.26
 
+with focal loss, acc: 0.7893
+with residual net : 0.7886
+
 <<< (2*9+1)-WAY EVALUATION (USING DIRECTIONALITY)>>>:
 
 Confusion matrix:

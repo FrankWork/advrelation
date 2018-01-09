@@ -1,6 +1,8 @@
 import tensorflow as tf
 from models.base_model import * 
 from models.adv import *
+from models.focal_loss import *
+from models.residual import residual_net
 
 flags = tf.app.flags
 
@@ -79,9 +81,13 @@ class CNNModel(BaseModel):
     pool_out = tf.squeeze(pool_out, axis=1)
     return pool_out
 
+  def conv_deep(self, inputs):
+    return residual_net(inputs, MAX_LEN, NUM_FILTERS, self.is_train, NUM_CLASSES)
+
   def compute_logits(self, sentence, pos1, pos2, lexical=None, regularizer=None):
     sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
     conv_out = self.conv_shallow(sent_pos)
+    # conv_out = self.conv_deep(sent_pos)
 
     conv_out = tf.layers.dropout(conv_out, FLAGS.dropout_rate, training=self.is_train)
 
@@ -93,9 +99,9 @@ class CNNModel(BaseModel):
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
       one_hot = tf.one_hot(labels, NUM_CLASSES)
-      # one_hot = label_smoothing(one_hot)
       cross_entropy = tf.losses.softmax_cross_entropy(logits=logits, 
                            onehot_labels=one_hot)
+      # cross_entropy = tf.reduce_mean(focal_loss(one_hot, logits))
 
     return cross_entropy
   

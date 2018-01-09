@@ -7,9 +7,8 @@
 - relation net; ProjE; entity, relation description
 
 - attention context, tensor2tensor
-- adversarial, vadv unsurpervised, norm clip
+- adversarial, vadv unsurpervised, residual
 - focal loss, scaled softmax
-- binary classification
 - Subword token
 - redifine position distance
 
