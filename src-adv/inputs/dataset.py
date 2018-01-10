@@ -134,7 +134,7 @@ class VocabMgr(object):
     np.save(trimed_embed_file, word_embed.astype(np.float32))
 
   def load_embedding(self, embed_file=TRIMMED_EMBED300_FILE):
-    return np.load(embed_file)
+    return np.load(os.path.join(OUT_DIR, embed_file))
 
   def map_token_to_id(self, tokens):
     '''convert a list of tokens to a list of ids

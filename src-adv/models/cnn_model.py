@@ -22,7 +22,7 @@ NUM_FILTERS = 320
 
 class CNNModel(BaseModel):
 
-  def __init__(self, word_embed, vocab_freq, semeval_data, is_adv, is_train):
+  def __init__(self, word_embed, semeval_data, unsup_data, is_adv, is_train):
     # input data
     self.is_train = is_train
     self.is_adv = is_adv
@@ -32,44 +32,29 @@ class CNNModel(BaseModel):
 
     # embedding initialization
     self.vocab_size, self.word_dim = word_embed.shape
-    # self.word_dim = 50
-    w_trainable = True if self.word_dim==50 else False
-    
-    initializer=word_embed
-    # initializer= tf.random_normal_initializer(0.0, self.word_dim**-0.5)
-    # shape = [8097, self.word_dim]
     self.word_embed = tf.get_variable('word_embed', 
-                                      # shape=shape,
-                                      initializer= initializer,
+                                      initializer= word_embed,
                                       dtype=tf.float32,
-                                      trainable=w_trainable)
-    # self.word_embed = self.normalize_embed(self.word_embed, vocab_freq)
+                                      trainable=False)
     pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]  
     self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
     self.tensors = dict()
 
-    with tf.variable_scope('semeval_graph'):
+    with tf.variable_scope('adv_graph'):
       self.build_semeval_graph(semeval_data)
+      self.build_nyt_graph(unsup_data)
 
   def bottom(self, data):
-    lexical, labels, length, sentence, pos1, pos2 = data
+    labels, length, sentence, pos1, pos2 = data
 
     # embedding lookup
-    # weight = self.word_dim**0.5
-    lexical = tf.nn.embedding_lookup(self.word_embed, lexical)
-    # lexical *= weight
-    # lexical = scale_l2(lexical)
-
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
-    # sentence *= weight
-    # sentence = scale_l2(sentence)
-
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
-    return lexical, labels, length, sentence, pos1, pos2
+    return labels, length, sentence, pos1, pos2
   
   def conv_shallow(self, inputs):
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
@@ -82,6 +67,7 @@ class CNNModel(BaseModel):
     return pool_out
 
   def conv_deep(self, inputs):
+    # FIXME auto reuse
     return residual_net(inputs, MAX_LEN, NUM_FILTERS, self.is_train, NUM_CLASSES)
 
   def compute_logits(self, sentence, pos1, pos2, lexical=None, regularizer=None):
@@ -106,7 +92,7 @@ class CNNModel(BaseModel):
     return cross_entropy
   
   def build_semeval_graph(self, data):
-    lexical, labels, length, sentence, pos1, pos2 = self.bottom(data)
+    labels, length, sentence, pos1, pos2 = self.bottom(data)
     sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
 
     # cross entropy loss
@@ -135,32 +121,45 @@ class CNNModel(BaseModel):
       acc = tf.cast(tf.equal(pred, labels), tf.float32)
       acc = tf.reduce_mean(acc)
 
-    # for t in tf.trainable_variables():
-    #   print(t.op.name)
-    # exit()
-
     self.tensors['acc'] = acc
     self.tensors['loss'] = loss_xent + loss_adv + loss_vadv + loss_l2
     self.tensors['pred'] = pred
 
+  def build_nyt_graph(self, data):
+    _, length, sentence, pos1, pos2 = self.bottom(data)
+    sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
+
+    # cross entropy loss
+    logits = self.compute_logits(sentence, pos1, pos2, regularizer=self.regularizer)
+
+    # vadv loss
+    loss_vadv = virtual_adversarial_loss(logits, length, sentence, pos1, pos2, self.compute_logits)
+
+    # l2 loss
+    regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    loss_l2 = sum(regularization_losses)
+   
+    self.tensors['unsup_loss'] = loss_vadv #+ loss_l2
+
   def build_train_op(self):
     if self.is_train:
-      # self.train_op = tf.no_op()
+      self.train_ops = dict()
       loss = self.tensors['loss']
-      self.train_op = optimize(loss, FLAGS.lrn_rate, decay_steps=None)
+      self.train_ops['train_loss'] = optimize(loss, FLAGS.lrn_rate, decay_steps=None)
+      unsup_loss = self.tensors['unsup_loss']
+      self.train_ops['train_unsup_loss'] = optimize(unsup_loss, 0.1*FLAGS.lrn_rate, decay_steps=None)
 
-
-def build_train_valid_model(model_name, word_embed, vocab_freq,
-                            semeval_train, semeval_test, 
+def build_train_valid_model(model_name, word_embed, 
+                            train_data, test_data, unsup_data,
                             is_adv, is_test):
   with tf.name_scope("Train"):
     with tf.variable_scope('CNNModel', reuse=None):
-      m_train = CNNModel(word_embed, vocab_freq, semeval_train, is_adv, is_train=True)
+      m_train = CNNModel(word_embed, train_data, unsup_data, is_adv, is_train=True)
       m_train.set_saver(model_name)
       if not is_test:
         m_train.build_train_op()
   with tf.name_scope('Valid'):
     with tf.variable_scope('CNNModel', reuse=True):
-      m_valid = CNNModel(word_embed, vocab_freq, semeval_test, is_adv, is_train=False)
+      m_valid = CNNModel(word_embed, test_data, unsup_data, is_adv, is_train=False)
       m_valid.set_saver(model_name)
   return m_train, m_valid

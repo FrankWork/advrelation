@@ -6,6 +6,8 @@ from inputs import dataset
 import tensorflow as tf
 
 DATA_DIR = "data/SemEval"
+OUT_DIR = "data/generated"
+
 TRAIN_FILE = "train.cln"
 TEST_FILE = "test.cln"
 LABEL_FILE = "relations.txt"
@@ -85,3 +87,19 @@ class SemEvalCleanedRecordData(dataset.RecordDataset):
   
   def padded_shapes(self):
     return ([], [], [None], [None], [None])
+
+
+def write_results(predictions):
+  id2relation = []
+  with open(os.path.join(DATA_DIR, LABEL_FILE)) as f:
+    for id, line in enumerate(f):
+      rel = line.strip()
+      id2relation.append(rel)
+  
+  start_no = 8001
+  with open(os.path.join(OUT_DIR, RESULTS_FILE), 'w') as f:
+    for idx, id in enumerate(predictions):
+      if idx < 2717:
+        rel = id2relation[id]
+        f.write('%d\t%s\n' % (start_no+idx, rel))
+        
