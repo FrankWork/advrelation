@@ -57,6 +57,8 @@ class CNNModel(BaseModel):
       ent2_toks, ent2_pos1, ent2_pos2,
       context, cont_pos1, cont_pos2) = data
 
+    self.context = context
+
     # sentence and pos from embedding
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
 
@@ -76,16 +78,42 @@ class CNNModel(BaseModel):
     cont_pos2 = tf.nn.embedding_lookup(self.pos2_embed, cont_pos2)
 
     # concat pos embedding to entities and context
-    context = tf.concat([context, cont_pos1, cont_pos2], axis=2)
-    ent1 = tf.concat([ent1_toks, ent1_pos1, ent1_pos2], axis=2)
-    ent2 = tf.concat([ent2_toks, ent2_pos1, ent2_pos2], axis=2)
+    # context = tf.concat([context, cont_pos1, cont_pos2], axis=2)
+    # ent1 = tf.concat([ent1_toks, ent1_pos1, ent1_pos2], axis=2)
+    # ent2 = tf.concat([ent2_toks, ent2_pos1, ent2_pos2], axis=2)
 
-    # ent1 = ent1_toks
-    # ent2 = ent2_toks
+    ent1 = ent1_toks
+    ent2 = ent2_toks
 
     batch = 100
     hop = 3
 
+    ########################################
+    # input attention
+    ########################################
+    ent1 = tf.reduce_mean(ent1, axis=1)
+    ent2 = tf.reduce_mean(ent2, axis=1)
+    
+    def attention(ent, context):
+      A1 = tf.matmul(context, tf.expand_dims(ent, -1))# bz, n, 1
+      A1 = tf.squeeze(A1, axis=-1)
+      alpha1 = tf.nn.softmax(A1)# bz, n
+      
+      return tf.expand_dims(alpha1, -1)
+      
+    alpha1 = attention(ent1, context)
+    ent1 = tf.multiply(context, alpha1) # bz, n, dc
+    ent1 = tf.reduce_mean(ent1, axis=1)
+
+    alpha2 = attention(ent2, context)
+    ent2 = tf.multiply(context, alpha2) # bz, n, dc
+    ent2 = tf.reduce_mean(ent2, axis=1)
+
+    self.alpha1 = tf.squeeze(alpha1, axis = -1)
+    self.alpha2 = tf.squeeze(alpha2, axis = -1)
+    
+
+    entities = tf.concat([ent1, ent2], axis=-1)
     ########################################
     # multi-head attention
     ########################################
@@ -113,21 +141,21 @@ class CNNModel(BaseModel):
     ## entities = tf.squeeze(entities, axis=1)
 
 
-    cont1 = context
-    cont2 = context
-    for i in range(hop):
-      cont1 = multihead_attention(cont1, ent1, num_heads=10, 
-                                    is_training=self.is_train, scope='att1%d'%i)
-      cont2 = multihead_attention(cont2, ent2, num_heads=10, 
-                                    is_training=self.is_train, scope='att2%d'%i)
-      cont1 = feedforward(cont1, num_units=[620, 310], scope='ffd1%d'%i)
-      cont2 = feedforward(cont2, num_units=[620, 310], scope='ffd2%d'%i)
-      ent1 = cont1
-      ent2 = cont2
+    # cont1 = context
+    # cont2 = context
+    # for i in range(hop):
+    #   cont1 = multihead_attention(cont1, ent1, num_heads=10, 
+    #                                 is_training=self.is_train, scope='att1%d'%i)
+    #   cont2 = multihead_attention(cont2, ent2, num_heads=10, 
+    #                                 is_training=self.is_train, scope='att2%d'%i)
+    #   cont1 = feedforward(cont1, num_units=[620, 310], scope='ffd1%d'%i)
+    #   cont2 = feedforward(cont2, num_units=[620, 310], scope='ffd2%d'%i)
+    #   ent1 = cont1
+    #   ent2 = cont2
 
-    ent1 = tf.reduce_max(ent1, axis=1) # (batch, 1, embed)
-    ent2 = tf.reduce_max(ent2, axis=1)
-    entities = tf.concat([ent1, ent2], axis=-1)
+    # ent1 = tf.reduce_max(ent1, axis=1) # (batch, 1, embed)
+    # ent2 = tf.reduce_max(ent2, axis=1)
+    # entities = tf.concat([ent1, ent2], axis=-1)
     # entities = tf.squeeze(entities, axis=1)
     
     return entities, label

@@ -76,9 +76,12 @@ def train_semeval(sess, m_train, m_valid, semeval_test_iter):
 
     # valid accuracy
     sem_valid_acc = 0.
-    for batch in range(28):
-      acc = sess.run(m_valid.tensors['acc'])
-      sem_valid_acc += acc
+    # for batch in range(28):
+    context, a1, a2 = sess.run([m_valid.context, m_valid.alpha1, m_valid.alpha2])
+    print(context[0][:15])
+    print(a1[0][:15])
+    print(a2[0][:15])
+      # sem_valid_acc += acc
     sem_valid_acc /= 28
 
     if best_acc < sem_valid_acc:
