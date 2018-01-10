@@ -6,7 +6,7 @@ import numpy as np
 
 # from inputs import semeval_v2 as semeval
 from inputs import util
-from inputs import semeval
+from inputs import semeval, nyt2010, semeval_v2
 from models import cnn_model
 
 # tf.set_random_seed(0)
@@ -40,15 +40,16 @@ def build_data():
     util.trim_embeddings(50)
     util.trim_embeddings(300)
 
-  print('load raw data')
-  semeval_train, semeval_test = semeval.load_raw_data(verbose=True)
+  # print('load raw data')
+  # semeval_train, semeval_test = semeval.load_raw_data(verbose=True)
 
-  print('build vocab')
-  semeval.build_vocab(semeval_train + semeval_test)
+  # print('build vocab')
+  # semeval.build_vocab(semeval_train + semeval_test)
 
-  _build_data(semeval_train, semeval_test)
+  # _build_data(semeval_train, semeval_test)
 
-  _trim_embed()
+  # _trim_embed()
+  
 
 def train_semeval(sess, m_train, m_valid, semeval_test_iter):
   best_acc, best_epoch = 0., 0

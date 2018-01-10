@@ -1,19 +1,24 @@
 import os
 import random
+import six
 from collections import defaultdict
 
 import numpy as np
 import tensorflow as tf
 
 PRETRAIN_DIR = "data/pretrain"
+OUT_DIR = "data/generated"
 
 GOOGLE_EMBED300_FILE = "embed300.google.npy"
 GOOGLE_WORDS_FILE = "google_words.lst"
-TRIMMED_EMBED300_FILE = "embed300.trim.npy
+TRIMMED_EMBED300_FILE = "embed300.trim.npy"
+
+VOCAB_SIZE = None#2**13 # 8k, 22k
+VOCAB_FILE = "vocab.txt"
 
 class VocabMgr(object):
-  def __init__(self, out_dir, vocab_file, vocab_freq_file=None,
-                     max_vocab_size=None, min_vocab_freq=None):
+  def __init__(self, out_dir=OUT_DIR, vocab_file=VOCAB_FILE, 
+                vocab_freq_file=None, max_vocab_size=None, min_vocab_freq=None):
     self.out_dir = out_dir
     self.vocab_file = os.path.join(out_dir, vocab_file)
     if vocab_freq_file:
@@ -51,7 +56,7 @@ class VocabMgr(object):
   @property
   def vocab2id(self):
     if self._vocab2id is None:
-      self._vocab2id = self._build_vocab2id(self, self.vocab)
+      self._vocab2id = self._build_vocab2id(self.vocab)
     return self._vocab2id
 
   def _generate_vocab_inner(self, token_generator):
@@ -138,8 +143,8 @@ class VocabMgr(object):
     '''
     ids = []
     for token in tokens:
-      if token in self.token2id:
-        tok_id = self.token2id[token]
+      if token in self.vocab2id:
+        tok_id = self.vocab2id[token]
         ids.append(tok_id)
     return ids
 
@@ -158,17 +163,25 @@ class Dataset(object):
     percent = [50, 70, 80, 90, 95, 98, 100]
     quantile = [np.percentile(length, p) for p in percent]
     
-    tf.loggin.info('(percent, quantile)', list(zip(percent, quantile)))
+    tf.logging.info('(percent, quantile) %s' % str(list(zip(percent, quantile))))
 
 class TextDataset(Dataset):
-  def __init__(self, data_dir, train_file, test_file, vocab_mgr):
-    self.train_file = os.path.join(self.data_dir, train_file)
-    self.test_file = os.path.join(self.data_dir, test_file)
-    self.vocab_mgr = vocab_mgr
+  def __init__(self, data_dir, max_len=None, train_file=None, test_file=None, unsup_file=None):
+    self.max_len = max_len
+    self.train_file = train_file
+    if self.train_file:
+      self.train_file = os.path.join(data_dir, self.train_file)
+      
+    self.test_file = test_file
+    if self.test_file:
+      self.test_file = os.path.join(data_dir, self.test_file)
 
-  def generate_vocab(self):
-    self.vocab_mgr.generate_vocab(self.tokens())
-    self.vocab_mgr.trim_pretrain_embedding()
+    self.unsup_file = unsup_file
+    if self.unsup_file:
+      self.unsup_file = os.path.join(data_dir, self.unsup_file)
+
+  def set_vocab_mgr(self, vocab_mgr):
+    self.vocab_mgr = vocab_mgr
 
   def tokens(self):
     for token in self.token_generator(self.train_file):
@@ -184,42 +197,48 @@ class TextDataset(Dataset):
     raise NotImplementedError
   
   def train_examples(self):
-    for example in self.example_generator(self.train_file):
-      yield example
+    if self.train_examples:
+      for example in self.example_generator(self.train_file):
+        yield example
 
   def test_examples(self):
-    for example in self.example_generator(self.test_file):
-      yield example
+    if self.test_file:
+      for example in self.example_generator(self.test_file):
+        yield example
+  
+  def unsup_examples(self):
+    if self.unsup_file:
+      for example in self.example_generator(self.unsup_file):
+        yield example
 
 class RecordDataset(Dataset):
-  def __init__(self, out_dir, train_record_file, test_record_file,
-               text_dataset):
-    self.out_dir = out_dir
-    self.train_record_file = os.path.join(self.out_dir, train_record_file)
-    self.test_record_file = os.path.join(self.out_dir, test_record_file)
+
+  def __init__(self, text_dataset, out_dir=OUT_DIR, train_record_file=None, 
+               test_record_file=None, unsup_record_file=None):
     self.text_dataset = text_dataset
+
+    self.train_record_file = train_record_file
+    if self.train_record_file:
+      self.train_record_file = os.path.join(out_dir, self.train_record_file)
+      
+    self.test_record_file = test_record_file
+    if self.test_record_file:
+      self.test_record_file = os.path.join(out_dir, self.test_record_file)
+
+    self.unsup_record_file = unsup_record_file
+    if self.unsup_record_file:
+      self.unsup_record_file = os.path.join(out_dir, self.unsup_record_file)
   
-  def example_generator(self, raw_example_generator):
-    """Generate examples."""
-    raise NotImplementedError
+  def _write_records(self, generator, file, shuffle=False):
+    writer = tf.python_io.TFRecordWriter(file)
+    for example in generator:
+      example = to_example(example)
+      writer.write(example.SerializeToString())
+    writer.close()
+    if shuffle:
+      self._shuffle_records(file)
 
-  def generate_data(self):
-    def _generate_data(generator, file, shuffle=False):
-      writer = tf.python_io.TFRecordWriter(file)
-      for example in generator:
-        tf_example = self.build_tfexample(example)
-        writer.write(tf_example.SerializeToString())
-      writer.close()
-      if shuffle:
-        self.shuffle_records(file)
-
-    train_generator = self.generator(TRAIN_FILE)
-    test_generator = self.generator(TEST_FILE)
-
-    self._generate_data(train_generator, TRAIN_RECORD, True)
-    self._generate_data(test_generator, TEST_RECORD, False)
-    
-  def shuffle_records(self, filename):
+  def _shuffle_records(self, filename):
     reader = tf.python_io.tf_record_iterator(filename)
     records = []
     for record in reader:
@@ -233,38 +252,20 @@ class RecordDataset(Dataset):
     for record in records:
       writer.write(record)
     writer.close()
-    
-  def build_tfexample(self, raw_example):
-    '''build tf.train.SequenceExample from dict
-    context features : lexical, rid
-    sequence features: sentence, position1, position2
 
-    Args: 
-      raw_example : type dict
+  def generate_data(self):
+    tf.logging.info('generate TFRecord data')
+    if self.train_record_file:
+      train_gen = self.text_dataset.train_examples()
+      self._write_records(train_gen, self.train_record_file, shuffle=True)
 
-    Returns:
-      tf.trian.SequenceExample
-    '''
-    ex = tf.train.SequenceExample()
+    if self.test_record_file:
+      test_gen = self.text_dataset.test_examples()
+      self._write_records(test_gen, self.test_record_file)
 
-    lexical = raw_example['lexical']
-    ex.context.feature['lexical'].int64_list.value.extend(lexical)
-
-    label = raw_example['label']
-    ex.context.feature['label'].int64_list.value.append(label)
-
-    for word_id in raw_example['sentence']:
-      word = ex.feature_lists.feature_list['sentence'].feature.add()
-      word.int64_list.value.append(word_id)
-    
-    for pos_val in raw_example['position1']:
-      pos = ex.feature_lists.feature_list['position1'].feature.add()
-      pos.int64_list.value.append(pos_val)
-    for pos_val in raw_example['position2']:
-      pos = ex.feature_lists.feature_list['position2'].feature.add()
-      pos.int64_list.value.append(pos_val)
-
-    return ex
+    if self.unsup_record_file:
+      unsup_gen = self.text_dataset.unsup_examples()
+      self._write_records(unsup_gen, self.unsup_record_file, shuffle=True)
 
   def get_length(self):
     length = []
@@ -273,42 +274,32 @@ class RecordDataset(Dataset):
       for record in reader:
         x = tf.train.SequenceExample()
         x.ParseFromString(record)
-        n = len(x.feature_lists.feature_list['sentence'].feature)
+        n = len(x.features.feature["sentence"].int64_list.value)
         length.append(n)
     return length
 
-  def parse_tfexample(self, serialized_example):
-    '''parse serialized tf.train.SequenceExample to tensors
-    context features : lexical, label
-    sequence features: sentence, position1, position2
-    '''
-    context_features={
-                        'lexical'   : tf.FixedLenFeature([6], tf.int64),
-                        'label'    : tf.FixedLenFeature([], tf.int64)}
-    sequence_features={
-                        'sentence' : tf.FixedLenSequenceFeature([], tf.int64),
-                        'position1'  : tf.FixedLenSequenceFeature([], tf.int64),
-                        'position2'  : tf.FixedLenSequenceFeature([], tf.int64)}
-    context_dict, sequence_dict = tf.parse_single_sequence_example(
-                        serialized_example,
-                        context_features   = context_features,
-                        sequence_features  = sequence_features)
+  def parse_example(self, example):
+    raise NotImplementedError
+  
+  def padded_shapes(self):
+    raise NotImplementedError
 
-    sentence = sequence_dict['sentence']
-    position1 = sequence_dict['position1']
-    position2 = sequence_dict['position2']
+  def train_data(self, epoch, batch_size):
+    if self.train_record_file:
+      return self._read_records(self.train_record_file, epoch, batch_size, 
+                                shuffle=True)
 
-    lexical = context_dict['lexical']
-    label = context_dict['label']
+  def test_data(self, epoch, batch_size):
+    if self.test_record_file:
+      return self._read_records(self.test_record_file, 1, batch_size, 
+                                shuffle=False)
+  
+  def unsup_data(self, epoch, batch_size):
+    if self.unsup_record_file:
+      return self._read_records(self.unsup_record_file, epoch, batch_size, 
+                                shuffle=True)
 
-    return lexical, label, sentence, position1, position2
-
-  def read_data(self, epoch, batch_size):
-    train_iter = self.read_tfrecord(TRAIN_RECORD, epoch, batch_size, True)
-    test_iter = self.read_tfrecord(TEST_RECORD, epoch, batch_size, False)
-    return train_iter, test_iter
-
-  def read_tfrecord(self, filename, epoch, batch_size, shuffle=True):
+  def _read_records(self, filename, epoch, batch_size, shuffle=True):
     '''read TFRecord file to get batch tensors for tensorflow models
 
     Returns:
@@ -317,17 +308,63 @@ class RecordDataset(Dataset):
     with tf.device('/cpu:0'):
       dataset = tf.data.TFRecordDataset([filename])
       # Parse the record into tensors
-      dataset = dataset.map(self.parse_tfexample)
+      dataset = dataset.map(self.parse_example)
       dataset = dataset.repeat(epoch)
       if shuffle:
         dataset = dataset.shuffle(buffer_size=1000)
       
-      padded_shapes = ([None,], [], [None], [None], [None])
-      dataset = dataset.padded_batch(batch_size, padded_shapes)
-      # dataset = dataset.batch(batch_size)
+      dataset = dataset.padded_batch(batch_size, self.padded_shapes())
       
       if shuffle:
         iterator = dataset.make_one_shot_iterator()
       else:
         iterator = dataset.make_initializable_iterator()
       return iterator
+
+def to_example(dictionary):
+  """Helper: build tf.Example from (string -> int/float/str list) dictionary."""
+  features = {}
+  for (k, v) in six.iteritems(dictionary):
+    if not v:
+      raise ValueError("Empty generated field: %s", str((k, v)))
+    if isinstance(v[0], six.integer_types):
+      features[k] = tf.train.Feature(int64_list=tf.train.Int64List(value=v))
+    elif isinstance(v[0], float):
+      features[k] = tf.train.Feature(float_list=tf.train.FloatList(value=v))
+    elif isinstance(v[0], six.string_types):
+      if not six.PY2:  # Convert in python 3.
+        v = [bytes(x, "utf-8") for x in v]
+      features[k] = tf.train.Feature(bytes_list=tf.train.BytesList(value=v))
+    elif isinstance(v[0], bytes):
+      features[k] = tf.train.Feature(bytes_list=tf.train.BytesList(value=v))
+    else:
+      raise ValueError("Value for %s is not a recognized type; v: %s type: %s" %
+                       (k, str(v[0]), str(type(v[0]))))
+  return tf.train.Example(features=tf.train.Features(feature=features))
+
+def relative_distance(n):
+  '''convert relative distance to positive number
+  -60), [-60, 60], (60
+  '''
+  if n < -60:
+    return 0
+  elif n >= -60 and n <= 60:
+    return n + 61
+  
+  return 122
+
+def position_feature(e_first, e_last, length):
+  pos = []
+  if e_first >= length:
+    e_first = length-1
+  if e_last >= length:
+    e_last = length-1
+
+  for i in range(length):
+    if i<e_first:
+      pos.append(relative_distance(i-e_first))
+    elif i>=e_first and i<=e_last:
+      pos.append(relative_distance(0))
+    else:
+      pos.append(relative_distance(i-e_last))
+  return pos
