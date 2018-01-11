@@ -9,4 +9,5 @@ __pycache__/
 tmp*
 cnn/
 push
+push.sh
 run

@@ -13,3 +13,4 @@ rsync -avh --delete --exclude=saved_models/  \
            --exclude=data/generated/ \
            --exclude=data \
       ./ $server
+      
