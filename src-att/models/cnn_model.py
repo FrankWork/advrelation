@@ -3,6 +3,9 @@ from models.base_model import *
 from models.attention import *
 from models.residual import residual_net
 
+import tensorflow.contrib.eager as tfe
+tfe.enable_eager_execution()
+
 flags = tf.app.flags
 
 flags.DEFINE_integer("pos_num", 123, "number of position feature")
@@ -69,6 +72,35 @@ class CNNModel(BaseModel):
     
     body_out = tf.layers.dropout(body_out, FLAGS.dropout_rate, training=self.is_train)
     return label, body_out
+
+  def entity_mask(self, sentence, ent_pos):
+    '''
+    Args:
+      sentence: [batch, len, feat]
+      ent_pos : [batch, 4]
+    '''
+    arr = tf.reshape(tf.range(3*10), [3, 10])
+
+    mask = tf.less(arr, 15)
+
+    arr_tmp = tf.unstack(arr, axis=0)
+    mask_tmp = tf.unstack(mask, axis=0)
+
+    masked_list = [tf.boolean_mask(arr, mask) for arr, mask in zip(arr_tmp, mask_tmp)]
+    length = tf.reduce_max([t.shape[0] for t in masked_list])
+    for t in masked_list:
+      print(t.shape)
+    print(length)
+
+    masked_list = [tf.pad(t, [[0, length-t.shape[0]]]) for t in masked_list]
+    for t in masked_list:
+      print(t.shape)
+
+    masked_list = tf.stack(masked_list)
+    print(masked_list)
+    with tf.Session() as sess:
+      t = sess.run(masked_list)
+      print(t)
 
   def conv_shallow(self, inputs):
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
