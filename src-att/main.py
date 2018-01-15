@@ -24,7 +24,7 @@ FLAGS = tf.app.flags.FLAGS
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
-def train_semeval(sess, m_train, m_valid, test_iter):
+def train_semeval(m_train, m_valid, test_iter):
   best_acc, best_epoch = 0., 0
   start_time = time.time()
   orig_begin_time = start_time
@@ -71,7 +71,7 @@ def train_semeval(sess, m_train, m_valid, test_iter):
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
 
-def test(sess, m_valid, test_iter):
+def test(m_valid, test_iter):
   m_valid.restore(sess)
   sess.run([test_iter.initializer])
   acc_tenser = m_valid.tensors['acc']
@@ -99,34 +99,25 @@ def main(_):
   word_embed = vocab_mgr.load_embedding()
   semeval_record = semeval_v2.SemEvalCleanedRecordData(None)
 
-  with tf.Graph().as_default():
-    train_iter = semeval_record.train_data(FLAGS.num_epochs, FLAGS.batch_size)
-    test_iter = semeval_record.test_data(1, FLAGS.batch_size)
-                                          
-    model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
-    train_data = train_iter.get_next()
-    test_data = test_iter.get_next()
-    m_train, m_valid = cnn_model.build_train_valid_model(
-                          model_name, word_embed,
-                          train_data, test_data,
-                          FLAGS.is_adv, FLAGS.is_test)
+  # load dataset
+  train_iter = semeval_record.train_data(FLAGS.num_epochs, FLAGS.batch_size)
+  test_iter = semeval_record.test_data(1, FLAGS.batch_size)
+                                        
+  model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
+  train_data = train_iter.get_next()
+  test_data = test_iter.get_next()
+  m_train, m_valid = cnn_model.build_train_valid_model(
+                        model_name, word_embed,
+                        train_data, test_data,
+                        FLAGS.is_adv, FLAGS.is_test)
 
-    init_op = tf.group(tf.global_variables_initializer(),
-                        tf.local_variables_initializer())# for file queue
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+  for tensor in tf.trainable_variables():
+    tf.logging.info(tensor.op.name)
 
-    for tensor in tf.trainable_variables():
-      tf.logging.info(tensor.op.name)
-    
-    with tf.Session(config=config) as sess:
-      sess.run(init_op)
-      print('='*80)
-
-      if FLAGS.is_test:
-        test(sess, m_valid, test_iter)
-      else:
-        train_semeval(sess, m_train, m_valid, test_iter)
+  if FLAGS.is_test:
+    test(m_valid, test_iter)
+  else:
+    train_semeval(m_train, m_valid, test_iter)
 
 if __name__ == '__main__':
   tf.app.run()

@@ -26,8 +26,7 @@ NUM_FILTERS = 310
 
 class CNNModel(BaseModel):
 
-  def __init__(self, word_embed, semeval_data, is_adv, is_train):
-    # input data
+  def __init__(self, word_embed, is_adv, is_train):
     self.is_train = is_train
     self.is_adv = is_adv
 
@@ -43,11 +42,6 @@ class CNNModel(BaseModel):
     pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]  
     self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
-
-    self.tensors = dict()
-
-    with tf.variable_scope('semeval_graph'):
-      self.build_semeval_graph(semeval_data)
 
   def body(self, data):
     label, length, ent_pos, sentence, position1, position2 = data
@@ -67,15 +61,17 @@ class CNNModel(BaseModel):
     # conv_out # [batch, MAX_LEN, NUM_FILTERS]
 
     # # max pool
-    # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
-    # pool_out = tf.squeeze(pool_out, axis=1)
+    pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
+    pool_out = tf.squeeze(pool_out, axis=1)
 
     # # attentive pool
-    ent1, ent2, context = self.extract_ent_context(conv_out, ent_pos)
-    pool_out = self.entity_attention(context, ent1, ent2)
+    # ent1, ent2, context = self.extract_ent_context(conv_out, ent_pos)
+    # pool_out = self.entity_attention(context, ent1, ent2)
 
-    body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
-    return label, body_out
+    pool_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
+    logits = tf.layers.dense(body_out, NUM_CLASSES, kernel_regularizer=self.regularizer)
+
+    return label, logits
 
   def extract_ent_context(self, inputs, ent_pos):
     '''
@@ -182,9 +178,7 @@ class CNNModel(BaseModel):
     
     return entities
 
-  def top(self, body_out, labels):
-    logits = tf.layers.dense(body_out, NUM_CLASSES, kernel_regularizer=self.regularizer)
-
+  def loss(self, logits, labels):
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
       one_hot = tf.one_hot(labels, NUM_CLASSES)
@@ -195,40 +189,22 @@ class CNNModel(BaseModel):
       regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
       loss = cross_entropy + sum(regularization_losses)
 
-    return logits, loss
+    return loss
+  
+  def prediction(self, logits):
+    return tf.argmax(logits, axis=1)
 
-  def build_semeval_graph(self, data):
-    labels, body_out = self.body(data)
-    logits, loss = self.top(body_out, labels)
+  def accuracy(self, logits, labels):
+    acc = tf.cast(tf.equal(pred, labels), tf.float32)
+    return tf.reduce_mean(acc)
 
-    # Accuracy
-    with tf.name_scope("accuracy"):
-      pred = tf.argmax(logits, axis=1)
-      acc = tf.cast(tf.equal(pred, labels), tf.float32)
-      acc = tf.reduce_mean(acc)
-
-    self.tensors['acc'] = acc
-    self.tensors['loss'] = loss
-    self.tensors['pred'] = pred
-
-  def build_train_op(self):
-    if self.is_train:
-      # self.train_op = tf.no_op()
-      loss = self.tensors['loss']
-      self.train_op = optimize(loss, FLAGS.lrn_rate)
-
-
-def build_train_valid_model(model_name, word_embed,
-                            semeval_train, semeval_test, 
-                            is_adv, is_test):
+def build_train_valid_model(model_name, word_embed, is_adv, is_test):
   with tf.name_scope("Train"):
     with tf.variable_scope('CNNModel', reuse=None):
-      m_train = CNNModel(word_embed, semeval_train, is_adv, is_train=True)
+      m_train = CNNModel(word_embed, is_adv, is_train=True)
       m_train.set_saver(model_name)
-      if not is_test:
-        m_train.build_train_op()
   with tf.name_scope('Valid'):
     with tf.variable_scope('CNNModel', reuse=True):
-      m_valid = CNNModel(word_embed, semeval_test, is_adv, is_train=False)
+      m_valid = CNNModel(word_embed, is_adv, is_train=False)
       m_valid.set_saver(model_name)
   return m_train, m_valid
