@@ -60,47 +60,93 @@ class CNNModel(BaseModel):
 
     # conv
     sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
-    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
+    inputs = tf.concat([sentence, pos1, pos2], axis=2)
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
                             'conv_block1',training=self.is_train, 
                              initializer=self.he_normal)
+    # conv_out # [batch, MAX_LEN, NUM_FILTERS]
 
-    pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
-    pool_out = tf.squeeze(pool_out, axis=1)
+    # # max pool
+    # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
+    # pool_out = tf.squeeze(pool_out, axis=1)
 
-    body_out = pool_out
-    
-    body_out = tf.layers.dropout(body_out, FLAGS.dropout_rate, training=self.is_train)
+    # # attentive pool
+    ent1, ent2, context = self.extract_ent_context(conv_out, ent_pos)
+    pool_out = self.entity_attention(context, ent1, ent2)
+
+    body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
     return label, body_out
 
-  def entity_mask(self, sentence, ent_pos):
+  def extract_ent_context(self, inputs, ent_pos):
     '''
     Args:
-      sentence: [batch, len, feat]
+      inputs: [batch, len, feat]
       ent_pos : [batch, 4]
+    
+    Returns:
+      ent1:   [batch, max_ent_len, feat]
+      ent2:   [batch, max_ent_len, feat]
+      context: [batch, max_cont_len, feat]
     '''
-    arr = tf.reshape(tf.range(3*10), [3, 10])
+    # inputs length range
+    n_len = inputs.shape.as_list()[1]
+    len_range = tf.range(n_len)
+    len_range = tf.expand_dims(len_range, axis=0)# (1, len)
 
-    mask = tf.less(arr, 15)
+    def entity_mask(len_range, start, end):
+      '''
+      Args
+        len_range: [1, len]
+        start: [] => [batch, 1]
+        end:   [] => [batch, 1]
 
-    arr_tmp = tf.unstack(arr, axis=0)
-    mask_tmp = tf.unstack(mask, axis=0)
+      Returns
+        mask: [batch, len, 1]
+      '''
+      # mask entity
+      m0 = tf.greater_equal(len_range, tf.expand_dims(start, axis=-1))
+      m1 = tf.less_equal(len_range, tf.expand_dims(end, axis=-1))
+      mask = tf.logical_and(m0, m1)
+      return tf.expand_dims(mask, -1)
+    
+    mask1 = entity_mask(len_range, ent_pos[:, 0], ent_pos[:, 1])
+    mask2 = entity_mask(len_range, ent_pos[:, 2], ent_pos[:, 3])
 
-    masked_list = [tf.boolean_mask(arr, mask) for arr, mask in zip(arr_tmp, mask_tmp)]
-    length = tf.reduce_max([t.shape[0] for t in masked_list])
-    for t in masked_list:
-      print(t.shape)
-    print(length)
+    mask = tf.logical_or(mask1, mask2)
+    mask = tf.logical_not(mask)
 
-    masked_list = [tf.pad(t, [[0, length-t.shape[0]]]) for t in masked_list]
-    for t in masked_list:
-      print(t.shape)
+    tensor_list = tf.unstack(inputs, axis=0)
 
-    masked_list = tf.stack(masked_list)
-    print(masked_list)
-    with tf.Session() as sess:
-      t = sess.run(masked_list)
-      print(t)
+    def extract(mask, tensor_list):
+      '''
+      Extract entity or context based on mask
+
+      Args
+        mask: [batch, len, 1]
+        tensor_list: a list of tensors, each has shape [1, len, feat]
+      Returns
+        a tensor of shape [batch, max_len, feat]
+      '''
+      n_feat = tensor_list[0].shape.as_list()[-1]
+      mask = tf.tile(mask, [1, 1, n_feat])
+
+      mask_list = tf.unstack(mask, axis=0)
+      tensor_list = []
+      for t, mask in zip(tensor_list, mask_list):
+        t = tf.boolean_mask(t, mask)
+        t = tf.reshape(t, [-1, n_feat])
+        tensor_list.append(t)
+
+      # pad extracted tensor, and stack as a tensor
+      max_len = tf.reduce_max([tensor.shape[0] for tensor in tensor_list])
+      tensor_list = [tf.pad(t, [[0, max_len-t.shape[0]], [0, 0]]) for t in tensor_list]
+      tensor = tf.stack(tensor_list)
+      return tensor
+    
+    ent1 = extract(mask1, tensor_list)
+    ent2 = extract(mask2, tensor_list)
+    context = extract(mask, tensor_list)
+    return ent1, ent2, context
 
   def conv_shallow(self, inputs):
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
