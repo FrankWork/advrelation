@@ -56,7 +56,7 @@ def main(_):
 
   # load dataset
   train_data = semeval_record.train_data(FLAGS.num_epochs, FLAGS.batch_size)
-  test_data = semeval_record.test_data(FLAGS.num_epochs, FLAGS.batch_size)
+  test_data = semeval_record.test_data(1, FLAGS.batch_size)
    
   # model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
   model = cnn_model.CNNModel(word_embed, FLAGS.is_adv)

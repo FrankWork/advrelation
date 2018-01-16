@@ -119,7 +119,7 @@ class CNNModel(BaseModel):
     with tf.name_scope("loss"):
       one_hot = tf.one_hot(labels, NUM_CLASSES)
       # one_hot = label_smoothing(one_hot)
-      cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(labels=one_hot,
+      cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=one_hot,
                                 logits=logits)
 
       l2_loss = tf.constant(0, dtype=tf.float32)
