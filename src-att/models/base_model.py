@@ -1,6 +1,8 @@
 import os
+import time
 import tensorflow as tf
-from tensorflow.python.framework import ops
+import tensorflow.contrib.eager as tfe
+tfe.enable_eager_execution()
 
 flags = tf.app.flags
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
@@ -25,6 +27,53 @@ class BaseModel(object):
 
   def save(self, session, global_step):
     self.saver.save(session, self.save_path, global_step)
+
+  def body(self, data):
+    raise NotImplementedError
+
+  def loss(self, logits, labels):
+    raise NotImplementedError
+  
+  def prediction(self, logits):
+    raise NotImplementedError
+  
+  def accuracy(self, logits, labels):
+    raise NotImplementedError
+  
+  def evaluate(self, test_data):
+    moving_acc = 0
+    n_step = 0
+
+    for data in tfe.Iterator(test_data):
+      labels, logits = self.body(train_data)
+      acc = self.accuracy(logits, labels)
+      moving_acc += acc
+      n_step += 1
+    
+    return moving_acc / n_step
+
+  def train(self, num_epochs, num_batchs_per_epoch, train_data):
+    best_acc, best_epoch = 0., 0
+    start_time = time.time()
+    orig_begin_time = start_time
+
+    grad = tfe.implicit_gradients(self.loss)
+    optimizer = tf.train.AdamOptimizer(FLAGS.lrn_rate)
+
+    for epoch in range(num_epochs):
+      moving_loss, moving_acc = 0, 0
+      for batch in range(num_batchs_per_epoch):
+        labels, logits = self.body(train_data)
+        optimizer.apply_gradients(grad(logits, labels))
+        loss = self.loss(logits, labels)
+        moving_loss += loss
+        moving_acc += acc
+      moving_loss /= num_batchs_per_epoch
+      moving_acc /= num_batchs_per_epoch
+
+      
+    for step, data in enumerate(tfe.Iterator(train_data)):
+      print(x)
 
 
 def conv_block_v2(inputs, kernel_size, num_filters, name, training, 
