@@ -61,18 +61,6 @@ class CNNModel(BaseModel):
     # conv_out # [batch, MAX_LEN, NUM_FILTERS]
 
     # # max pool
-<<<<<<< HEAD
-    # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
-    # pool_out = tf.squeeze(pool_out, axis=1)
-
-    # # attentive pool
-    ent1, ent2, context = self.extract_ent_context(conv_out, ent_pos)
-    pool_out = self.entity_attention(context, ent1, ent2)
-
-    body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
-    return label, body_out
-
-=======
     pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
     pool_out = tf.squeeze(pool_out, axis=1)
 
@@ -85,7 +73,6 @@ class CNNModel(BaseModel):
 
     return label, logits
 
->>>>>>> b896c2e12eb10ebe28a581fbd9662dfca79af851
   def extract_ent_context(self, inputs, ent_pos):
     '''
     Args:
