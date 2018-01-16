@@ -4,7 +4,6 @@ from models.attention import *
 from models.residual import residual_net
 
 import tensorflow.contrib.eager as tfe
-tfe.enable_eager_execution()
 
 flags = tf.app.flags
 
@@ -13,7 +12,7 @@ flags.DEFINE_integer("pos_dim", 5, "position embedding size")
 flags.DEFINE_integer("num_hops", 1, "hop numbers of entity attention")
 flags.DEFINE_float("l2_coef", 0.01, "l2 loss coefficient")
 flags.DEFINE_float("dropout_rate", 0.5, "dropout probability")
-flags.DEFINE_float("lrn_rate", 0.001, "learning rate")
+
 
 FLAGS = flags.FLAGS
 
@@ -24,54 +23,112 @@ NUM_CLASSES = 19
 KERNEL_SIZE = 3
 NUM_FILTERS = 310
 
+class EmbedLayer(tf.layers.Layer):
+  def __init__(self, name, pretrained_embed=None, tune=False, shape=None, **kwargs):
+    if pretrained_embed is not None:
+      self.embed = tf.get_variable(name, initializer=pretrained_embed,
+                                   dtype=tf.float32, trainable=tune)
+    else:
+      assert shape is not None
+      self.embed = tf.get_variable(name, shape=shape)
+
+    super(EmbedLayer, self).__init__(**kwargs)
+  
+  def call(self, x):
+    return tf.nn.embedding_lookup(self.embed, x)
+
+class CNNShallowNetwork(tfe.Network):
+  def __init__(self, word_embed, pos1_embed, pos2_embed):
+    super(CNNShallowNetwork, self).__init__()
+    self.is_train = True
+
+    self.word_embed = self.track_layer(word_embed)
+    self.pos1_embed = self.track_layer(pos1_embed)
+    self.pos2_embed = self.track_layer(pos2_embed)
+
+    self.input_drop_layer = self.track_layer(
+      tf.layers.Dropout(FLAGS.dropout_rate)
+    )
+
+    self.conv_layer = self.track_layer(
+      tf.layers.Conv1D(NUM_FILTERS, KERNEL_SIZE, strides=1, padding='same', 
+                       activation=tf.nn.relu,
+                       kernel_initializer=tf.keras.initializers.he_normal())
+      )
+    self.pool_layer = self.track_layer(
+      tf.layers.MaxPooling1D(MAX_LEN, MAX_LEN, padding='same')
+    )
+    self.output_drop_layer = self.track_layer(
+      tf.layers.Dropout(FLAGS.dropout_rate)
+    )
+    self.dense_layer = self.track_layer(
+      tf.layers.Dense(NUM_CLASSES)
+    )
+
+  def call(self, inputs):
+    length, ent_pos, sentence, position1, position2 = inputs
+
+    sentence = self.word_embed(sentence)
+    pos1 = self.pos1_embed(position1)
+    pos2 = self.pos2_embed(position2)
+
+    if self.is_train:
+      sentence = self.input_drop_layer(sentence)
+    x = tf.concat([sentence, pos1, pos2], axis=2)
+
+    conv_out = self.conv_layer(x)
+    pool_out = self.pool_layer(conv_out)
+    pool_out = tf.squeeze(pool_out, axis=1)
+    if self.is_train:
+      pool_out = self.output_drop_layer(pool_out)
+    return self.dense_layer(pool_out)
+
 class CNNModel(BaseModel):
 
-  def __init__(self, word_embed, is_adv, is_train):
-    self.is_train = is_train
+  def __init__(self, word_embed, is_adv):
     self.is_adv = is_adv
 
-    self.he_normal = tf.keras.initializers.he_normal()
-    self.regularizer = tf.contrib.layers.l2_regularizer(FLAGS.l2_coef)
-
     # embedding initialization
-    self.vocab_size, self.word_dim = word_embed.shape
-    self.word_embed = tf.get_variable('word_embed', 
-                                      initializer= word_embed,
-                                      dtype=tf.float32,
-                                      trainable=False)
+    word_embed = EmbedLayer('word_embed', pretrained_embed=word_embed)
     pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]  
-    self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
-    self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
+    pos1_embed = EmbedLayer('pos1_embed', shape=pos_shape)
+    pos2_embed = EmbedLayer('pos2_embed', shape=pos_shape)
 
-  def body(self, data):
+    self.network = CNNShallowNetwork(word_embed, pos1_embed, pos2_embed)
+
+    super(CNNModel, self).__init__()
+
+  def set_train_mode(self):
+    self.network.is_train = True
+  
+  def set_test_mode(self):
+    self.network.is_train = False
+
+  def forward(self, data):
     label, length, ent_pos, sentence, position1, position2 = data
-
-    # sentence and pos from embedding
-    sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
-
-    pos1 = tf.nn.embedding_lookup(self.pos1_embed, position1)
-    pos2 = tf.nn.embedding_lookup(self.pos2_embed, position2)
-
-    # conv
-    sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
-    inputs = tf.concat([sentence, pos1, pos2], axis=2)
-    conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
-                            'conv_block1',training=self.is_train, 
-                             initializer=self.he_normal)
-    # conv_out # [batch, MAX_LEN, NUM_FILTERS]
-
-    # # max pool
-    pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
-    pool_out = tf.squeeze(pool_out, axis=1)
-
-    # # attentive pool
-    # ent1, ent2, context = self.extract_ent_context(conv_out, ent_pos)
-    # pool_out = self.entity_attention(context, ent1, ent2)
-
-    pool_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
-    logits = tf.layers.dense(body_out, NUM_CLASSES, kernel_regularizer=self.regularizer)
+    inputs = (length, ent_pos, sentence, position1, position2)
+    logits = self.network(inputs)
 
     return label, logits
+  
+  def loss(self, data):
+    labels, logits = self.forward(data)
+    self.tensors['acc'] = self.accuracy(logits, labels)
+
+    # Calculate Mean cross-entropy loss
+    with tf.name_scope("loss"):
+      one_hot = tf.one_hot(labels, NUM_CLASSES)
+      # one_hot = label_smoothing(one_hot)
+      cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(labels=one_hot,
+                                logits=logits)
+
+      l2_loss = tf.constant(0, dtype=tf.float32)
+      for tensor in self.network.dense_layer.variables:
+        l2_loss += FLAGS.l2_coef * tf.nn.l2_loss(tensor)
+
+      loss = tf.reduce_mean(cross_entropy) + l2_loss
+
+    return loss
 
   def extract_ent_context(self, inputs, ent_pos):
     '''
@@ -178,33 +235,10 @@ class CNNModel(BaseModel):
     
     return entities
 
-  def loss(self, logits, labels):
-    # Calculate Mean cross-entropy loss
-    with tf.name_scope("loss"):
-      one_hot = tf.one_hot(labels, NUM_CLASSES)
-      # one_hot = label_smoothing(one_hot)
-      cross_entropy = tf.losses.softmax_cross_entropy(logits=logits, 
-                           onehot_labels=one_hot)
-
-      regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-      loss = cross_entropy + sum(regularization_losses)
-
-    return loss
-  
   def prediction(self, logits):
     return tf.argmax(logits, axis=1)
 
   def accuracy(self, logits, labels):
+    pred = self.prediction(logits)
     acc = tf.cast(tf.equal(pred, labels), tf.float32)
     return tf.reduce_mean(acc)
-
-def build_train_valid_model(model_name, word_embed, is_adv, is_test):
-  with tf.name_scope("Train"):
-    with tf.variable_scope('CNNModel', reuse=None):
-      m_train = CNNModel(word_embed, is_adv, is_train=True)
-      m_train.set_saver(model_name)
-  with tf.name_scope('Valid'):
-    with tf.variable_scope('CNNModel', reuse=True):
-      m_valid = CNNModel(word_embed, is_adv, is_train=False)
-      m_valid.set_saver(model_name)
-  return m_train, m_valid

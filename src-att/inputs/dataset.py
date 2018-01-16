@@ -291,7 +291,7 @@ class RecordDataset(Dataset):
 
   def test_data(self, epoch, batch_size):
     if self.test_record_file:
-      return self._read_records(self.test_record_file, 1, batch_size, 
+      return self._read_records(self.test_record_file, epoch, batch_size, 
                                 shuffle=False)
   
   def unsup_data(self, epoch, batch_size):
@@ -305,21 +305,17 @@ class RecordDataset(Dataset):
     Returns:
       a tuple of batched tensors
     '''
-    with tf.device('/cpu:0'):
-      dataset = tf.data.TFRecordDataset([filename])
-      # Parse the record into tensors
-      dataset = dataset.map(self.parse_example)
-      dataset = dataset.repeat(epoch)
-      if shuffle:
-        dataset = dataset.shuffle(buffer_size=1000)
+    # with tf.device('/cpu:0'):
+    dataset = tf.data.TFRecordDataset([filename])
+    # Parse the record into tensors
+    dataset = dataset.map(self.parse_example)
+    dataset = dataset.repeat(epoch)
+    if shuffle:
+      dataset = dataset.shuffle(buffer_size=1000)
+    
+    dataset = dataset.padded_batch(batch_size, self.padded_shapes())
       
-      dataset = dataset.padded_batch(batch_size, self.padded_shapes())
-      
-      if shuffle:
-        iterator = dataset.make_one_shot_iterator()
-      else:
-        iterator = dataset.make_initializable_iterator()
-      return iterator
+    return dataset
 
 def to_example(dictionary):
   """Helper: build tf.Example from (string -> int/float/str list) dictionary."""

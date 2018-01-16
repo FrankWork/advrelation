@@ -1,15 +1,19 @@
 import os
+import sys
 import time
 import tensorflow as tf
 import tensorflow.contrib.eager as tfe
-tfe.enable_eager_execution()
 
 flags = tf.app.flags
 flags.DEFINE_string("logdir", "saved_models/", "where to save the model")
+
 FLAGS = tf.app.flags.FLAGS
 
 
 class BaseModel(object):
+
+  def __init__(self):
+    self.tensors = dict()
 
   def set_saver(self, save_dir):
     '''
@@ -40,42 +44,86 @@ class BaseModel(object):
   def accuracy(self, logits, labels):
     raise NotImplementedError
   
-  def evaluate(self, test_data):
+  def set_train_mode(self):
+    raise NotImplementedError
+  
+  def set_test_mode(self):
+    raise NotImplementedError
+
+  def evaluate(self, eval_steps, test_data):
+    self.set_test_mode()
     moving_acc = 0
     n_step = 0
 
-    for data in tfe.Iterator(test_data):
-      labels, logits = self.body(train_data)
+    for batch_data in tfe.Iterator(test_data):
+      labels, logits = self.forward(batch_data)
       acc = self.accuracy(logits, labels)
       moving_acc += acc
       n_step += 1
+      if n_step % eval_steps == 0:
+        break
     
+    self.set_train_mode()
     return moving_acc / n_step
 
-  def train(self, num_epochs, num_batchs_per_epoch, train_data):
+  def train_and_eval(self, num_epochs, num_batchs_per_epoch, 
+                      lrn_rate, train_data, test_data):
     best_acc, best_epoch = 0., 0
     start_time = time.time()
     orig_begin_time = start_time
+    
+    val_and_grad_fn = tfe.implicit_value_and_gradients(self.loss)
+    # grad_fn = tfe.implicit_gradients(self.loss)
 
-    grad = tfe.implicit_gradients(self.loss)
-    optimizer = tf.train.AdamOptimizer(FLAGS.lrn_rate)
+    optimizer = tf.train.AdamOptimizer(lrn_rate)
 
-    for epoch in range(num_epochs):
-      moving_loss, moving_acc = 0, 0
-      for batch in range(num_batchs_per_epoch):
-        labels, logits = self.body(train_data)
-        optimizer.apply_gradients(grad(logits, labels))
-        loss = self.loss(logits, labels)
+    epoch = 0
+    moving_loss, moving_acc = 0, 0
+    device = "/gpu:0" if tfe.num_gpus() > 1 else "/cpu:0"
+    
+    with tf.device(device):
+      for batch, batch_data in enumerate(tfe.Iterator(train_data)):
+        loss, grad_and_var = val_and_grad_fn(batch_data)
+        # labels, logits = self.forward(batch_data)
+        # acc = self.accuracy(logits, labels)
+        acc = self.tensors['acc']
+
+        optimizer.apply_gradients(grad_and_var)
+        # print(batch, loss.numpy(), acc.numpy())
+
         moving_loss += loss
         moving_acc += acc
-      moving_loss /= num_batchs_per_epoch
-      moving_acc /= num_batchs_per_epoch
 
-      
-    for step, data in enumerate(tfe.Iterator(train_data)):
-      print(x)
+        if (batch+1) % num_batchs_per_epoch == 0:
+          moving_loss /= num_batchs_per_epoch
+          moving_acc /= num_batchs_per_epoch
 
+          # epoch duration
+          now = time.time()
+          duration = now - start_time
+          start_time = now
+          
+          valid_acc = self.evaluate(28, test_data)
+          if best_acc < valid_acc:
+            best_acc = valid_acc
+            best_epoch = epoch
 
+          print("Epoch %d loss %.2f acc %.2f %.4f time %.2f" % 
+              (epoch, moving_loss, moving_acc, valid_acc, duration))
+          sys.stdout.flush()
+
+          epoch += 1
+          moving_loss = 0
+          moving_acc = 0
+          if epoch == num_epochs:
+            break
+    
+    duration = time.time() - orig_begin_time
+    duration /= 3600
+    print('Done training, best_epoch: %d, best_acc: %.4f' % (best_epoch, best_acc))
+    print('duration: %.2f hours' % duration)
+    sys.stdout.flush()
+  
 def conv_block_v2(inputs, kernel_size, num_filters, name, training, 
                batch_norm=False, initializer=None, shortcut=None, reuse=None):
   with tf.variable_scope(name, reuse=reuse):

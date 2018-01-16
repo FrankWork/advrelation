@@ -1,8 +1,10 @@
 import os
 import time
-import sys
-import tensorflow as tf
 import numpy as np
+
+import tensorflow as tf
+import tensorflow.contrib.eager as tfe
+tfe.enable_eager_execution()
 
 from inputs import  dataset, semeval_v2
 from models import cnn_model
@@ -15,7 +17,7 @@ flags = tf.app.flags
 flags.DEFINE_integer("word_dim", 300, "word embedding size")
 flags.DEFINE_integer("num_epochs", 50, "number of epochs")
 flags.DEFINE_integer("batch_size", 100, "batch size")
-
+flags.DEFINE_float("lrn_rate", 0.001, "learning rate")
 flags.DEFINE_boolean('is_adv', False, 'set True to use adv training')
 flags.DEFINE_boolean('is_test', False, 'set True to test')
 
@@ -23,53 +25,6 @@ FLAGS = tf.app.flags.FLAGS
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-
-def train_semeval(m_train, m_valid, test_iter):
-  best_acc, best_epoch = 0., 0
-  start_time = time.time()
-  orig_begin_time = start_time
- 
-  for epoch in range(FLAGS.num_epochs):
-    sess.run([test_iter.initializer])
-
-    # train SemEval
-    sem_loss, sem_acc = 0., 0.
-    for batch in range(80):
-      train_op = m_train.train_op
-      fetches = [train_op, m_train.tensors['loss'], m_train.tensors['acc']]
-      _, loss, acc = sess.run(fetches)
-      sem_loss += loss
-      sem_acc += acc
-
-    sem_loss /= 80
-    sem_acc /= 80
-
-    # epoch duration
-    now = time.time()
-    duration = now - start_time
-    start_time = now
-
-    # valid accuracy
-    sem_valid_acc = 0.
-    for batch in range(28):
-      acc = sess.run(m_valid.tensors['acc'])
-      sem_valid_acc += acc
-    sem_valid_acc /= 28
-
-    if best_acc < sem_valid_acc:
-      best_acc = sem_valid_acc
-      best_epoch = epoch
-      m_train.save(sess, epoch)
-    
-    print("Epoch %d sem %.2f %.2f %.4f time %.2f" % 
-             (epoch, sem_loss, sem_acc, sem_valid_acc, duration))
-    sys.stdout.flush()
-  
-  duration = time.time() - orig_begin_time
-  duration /= 3600
-  print('Done training, best_epoch: %d, best_acc: %.4f' % (best_epoch, best_acc))
-  print('duration: %.2f hours' % duration)
-  sys.stdout.flush()
 
 def test(m_valid, test_iter):
   m_valid.restore(sess)
@@ -100,24 +55,16 @@ def main(_):
   semeval_record = semeval_v2.SemEvalCleanedRecordData(None)
 
   # load dataset
-  train_iter = semeval_record.train_data(FLAGS.num_epochs, FLAGS.batch_size)
-  test_iter = semeval_record.test_data(1, FLAGS.batch_size)
-                                        
-  model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
-  train_data = train_iter.get_next()
-  test_data = test_iter.get_next()
-  m_train, m_valid = cnn_model.build_train_valid_model(
-                        model_name, word_embed,
-                        train_data, test_data,
-                        FLAGS.is_adv, FLAGS.is_test)
-
-  for tensor in tf.trainable_variables():
-    tf.logging.info(tensor.op.name)
-
-  if FLAGS.is_test:
-    test(m_valid, test_iter)
-  else:
-    train_semeval(m_train, m_valid, test_iter)
+  train_data = semeval_record.train_data(FLAGS.num_epochs, FLAGS.batch_size)
+  test_data = semeval_record.test_data(FLAGS.num_epochs, FLAGS.batch_size)
+   
+  # model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
+  model = cnn_model.CNNModel(word_embed, FLAGS.is_adv)
+ 
+  # for tensor in tf.trainable_variables():
+  #   tf.logging.info(tensor.op.name)
+  
+  model.train_and_eval(FLAGS.num_epochs, 80, FLAGS.lrn_rate, train_data, test_data)
 
 if __name__ == '__main__':
   tf.app.run()
