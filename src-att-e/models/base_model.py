@@ -79,13 +79,16 @@ class BaseModel(object):
 
     epoch = 0
     moving_loss, moving_acc = 0, 0
+    max_norm = 0
     device = "/gpu:0" if tfe.num_gpus() > 1 else "/cpu:0"
     
     with tf.device(device):
       for batch, batch_data in enumerate(tfe.Iterator(train_data)):
         loss, grad_and_var = val_and_grad_fn(batch_data)
-        # labels, logits = self.forward(batch_data)
-        # acc = self.accuracy(logits, labels)
+        
+        # grad_list = [grad for grad, _ in grad_and_var]
+        # max_norm = max(max_norm, tf.global_norm(grad_list)) # max_norm < 2
+        
         acc = self.tensors['acc']
 
         optimizer.apply_gradients(grad_and_var)
@@ -107,6 +110,11 @@ class BaseModel(object):
           if best_acc < valid_acc:
             best_acc = valid_acc
             best_epoch = epoch
+          
+          # var_list = [var for _, var in grad_and_var]
+          # norm_list = [tf.norm(var) for var in var_list]
+          # for var, norm in zip(var_list, norm_list):
+          #   print('%s\t%.2f' % (var.name, norm.numpy()))
 
           print("Epoch %d loss %.2f acc %.2f %.4f time %.2f" % 
               (epoch, moving_loss, moving_acc, valid_acc, duration))
@@ -115,6 +123,7 @@ class BaseModel(object):
           epoch += 1
           moving_loss = 0
           moving_acc = 0
+          # max_norm = 0
           if epoch == num_epochs:
             break
     

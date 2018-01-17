@@ -7,20 +7,20 @@ semeval_text = semeval_v2.SemEvalCleanedTextData()
 # nyt_text = nyt2010.NYT2010CleanedTextData()
 
 # length statistics
-# semeval_text.length_statistics()
+semeval_text.length_statistics()
 # nyt_text.length_statistics()
 
 # gen vocab
 vocab_mgr = dataset.VocabMgr()
-# vocab_mgr.generate_vocab(semeval_text.tokens())
+vocab_mgr.generate_vocab(semeval_text.tokens())
 
-# # trim embedding
-vocab_mgr.trim_pretrain_embedding()
+# trim embedding
+# vocab_mgr.trim_pretrain_embedding()
 
 # build SemEval record data
-# semeval_text.set_vocab_mgr(vocab_mgr)
-# semeval_record = semeval_v2.SemEvalCleanedRecordData(semeval_text)
-# semeval_record.generate_data()
+semeval_text.set_vocab_mgr(vocab_mgr)
+semeval_record = semeval_v2.SemEvalCleanedRecordData(semeval_text)
+semeval_record.generate_data()
 
 # build nyt record data
 # nyt_text.set_vocab_mgr(vocab_mgr)

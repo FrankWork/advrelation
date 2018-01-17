@@ -24,27 +24,43 @@ KERNEL_SIZE = 3
 NUM_FILTERS = 310
 
 class EmbedLayer(tf.layers.Layer):
-  def __init__(self, name, pretrained_embed=None, tune=False, shape=None, **kwargs):
-    if pretrained_embed is not None:
-      self.embed = tf.get_variable(name, initializer=pretrained_embed,
-                                   dtype=tf.float32, trainable=tune)
-    else:
-      assert shape is not None
-      self.embed = tf.get_variable(name, shape=shape)
+  def __init__(self, layer_name, pretrained_embed=None, tune=False, shape=None, **kwargs):
+    self.layer_name = layer_name
+    self.pretrained_embed = pretrained_embed
+    self.tune = tune
+    self.shape = shape
+    self.embed = None
 
     super(EmbedLayer, self).__init__(**kwargs)
   
-  def call(self, x):
+  def build(self, _):
+    with tf.variable_scope('embed_layer_%s'%self.layer_name):
+      if self.pretrained_embed is not None:
+        self.embed = self.add_variable(self.layer_name, shape=None, 
+                              initializer=self.pretrained_embed,
+                              dtype=tf.float32, trainable=self.tune)
+      else:
+        assert self.shape is not None
+        self.embed = self.add_variable(self.layer_name, shape=self.shape,
+                              initializer=tf.keras.initializers.he_normal())
+
+  def lookup(self, x):
+    if self.embed is None:
+      self.build(None)
     return tf.nn.embedding_lookup(self.embed, x)
 
 class CNNShallowNetwork(tfe.Network):
-  def __init__(self, word_embed, pos1_embed, pos2_embed):
+  def __init__(self, pretrained_embed):
     super(CNNShallowNetwork, self).__init__()
     self.is_train = True
 
-    self.word_embed = self.track_layer(word_embed)
-    self.pos1_embed = self.track_layer(pos1_embed)
-    self.pos2_embed = self.track_layer(pos2_embed)
+    # embedding initialization
+    pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]  
+
+    self.word_embed = self.track_layer(
+                EmbedLayer('word_embed', pretrained_embed=pretrained_embed))
+    self.pos1_embed = self.track_layer(EmbedLayer('pos1_embed', shape=pos_shape))
+    self.pos2_embed = self.track_layer(EmbedLayer('pos2_embed', shape=pos_shape))
 
     self.input_drop_layer = self.track_layer(
       tf.layers.Dropout(FLAGS.dropout_rate)
@@ -68,9 +84,10 @@ class CNNShallowNetwork(tfe.Network):
   def call(self, inputs):
     length, ent_pos, sentence, position1, position2 = inputs
 
-    sentence = self.word_embed(sentence)
-    pos1 = self.pos1_embed(position1)
-    pos2 = self.pos2_embed(position2)
+    
+    sentence = self.word_embed.lookup(sentence)
+    pos1 = self.pos1_embed.lookup(position1)
+    pos2 = self.pos2_embed.lookup(position2)
 
     if self.is_train:
       sentence = self.input_drop_layer(sentence)
@@ -87,14 +104,7 @@ class CNNModel(BaseModel):
 
   def __init__(self, word_embed, is_adv):
     self.is_adv = is_adv
-
-    # embedding initialization
-    word_embed = EmbedLayer('word_embed', pretrained_embed=word_embed)
-    pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]  
-    pos1_embed = EmbedLayer('pos1_embed', shape=pos_shape)
-    pos2_embed = EmbedLayer('pos2_embed', shape=pos_shape)
-
-    self.network = CNNShallowNetwork(word_embed, pos1_embed, pos2_embed)
+    self.network = CNNShallowNetwork(word_embed)
 
     super(CNNModel, self).__init__()
 
@@ -107,7 +117,11 @@ class CNNModel(BaseModel):
   def forward(self, data):
     label, length, ent_pos, sentence, position1, position2 = data
     inputs = (length, ent_pos, sentence, position1, position2)
+    
     logits = self.network(inputs)
+    # for tensor in self.network.variables:
+    #   print(tensor.name, tensor.shape)
+    # exit()
 
     return label, logits
   
@@ -119,12 +133,15 @@ class CNNModel(BaseModel):
     with tf.name_scope("loss"):
       one_hot = tf.one_hot(labels, NUM_CLASSES)
       # one_hot = label_smoothing(one_hot)
-      cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=one_hot,
+      cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(labels=one_hot,
                                 logits=logits)
 
       l2_loss = tf.constant(0, dtype=tf.float32)
       for tensor in self.network.dense_layer.variables:
         l2_loss += FLAGS.l2_coef * tf.nn.l2_loss(tensor)
+      
+      for tensor in self.network.conv_layer.variables:
+        l2_loss += 1e-3 * tf.nn.l2_loss(tensor)
 
       loss = tf.reduce_mean(cross_entropy) + l2_loss
 
