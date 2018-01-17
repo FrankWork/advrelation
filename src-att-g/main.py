@@ -106,10 +106,10 @@ def main(_):
     model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
     train_data = train_iter.get_next()
     test_data = test_iter.get_next()
-    m_train, m_valid = cnn_model.build_train_valid_model(
-                          model_name, word_embed,
-                          train_data, test_data,
-                          FLAGS.is_adv, FLAGS.is_test)
+    # m_train, m_valid = cnn_model.build_train_valid_model(
+    #                       model_name, word_embed,
+    #                       train_data, test_data,
+    #                       FLAGS.is_adv, FLAGS.is_test)
 
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
@@ -118,10 +118,15 @@ def main(_):
 
     for tensor in tf.trainable_variables():
       tf.logging.info(tensor.op.name)
-    
+
     with tf.Session(config=config) as sess:
       sess.run(init_op)
       print('='*80)
+
+      batch_data = sess.run(train_data)
+      for tensor in batch_data:
+        print(tensor.shape)
+      exit()
 
       if FLAGS.is_test:
         test(sess, m_valid, test_iter)
