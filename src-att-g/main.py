@@ -121,6 +121,10 @@ def main(_):
       print('='*80)
       for tensor in tf.trainable_variables():
         tf.logging.info(tensor.op.name)
+      
+      # for tensor in sess.run(m_train.out_t):
+      #   print(tensor.shape)
+      # exit()
     
       if FLAGS.is_test:
         test(sess, m_valid, test_iter)

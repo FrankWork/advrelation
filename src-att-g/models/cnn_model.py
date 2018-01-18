@@ -61,15 +61,56 @@ class CNNModel(BaseModel):
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
                             'conv_block1',training=self.is_train, 
                              initializer=self.he_normal)
+    # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
+    # pool_out1 = tf.squeeze(pool_out, axis=1)
 
-    pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
-    pool_out = tf.squeeze(pool_out, axis=1)
+    ent1, ent2, context = self.slice_ent_and_context(conv_out, ent_pos, length)
+    pool_out2 = self.entity_attention(context, ent1, ent2)
 
-    body_out = pool_out
-    
-    body_out = tf.layers.dropout(body_out, FLAGS.dropout_rate, training=self.is_train)
+    # pool_out = tf.concat([pool_out1, pool_out2], axis=1)
+    pool_out = pool_out2
+
+    body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
     return label, body_out
 
+  def slice_ent_and_context(self, conv_out, ent_pos, length):
+    '''
+    Args
+      conv_out: [batch, max_len, filters]
+      ent_pos:  [batch, 4]
+      length:   [batch]
+    '''
+    # slice ent1
+    # -------(e1.first--e1.last)-------e2.first--e2.last-------
+    begin1 = ent_pos[:, 0]
+    size1 = ent_pos[:, 1] - ent_pos[:, 0] + 1
+    ent1 = slice_batch(conv_out, begin1, size1)
+
+    # slice ent2
+    # -------e1.first--e1.last-------(e2.first--e2.last)-------
+    begin2 = ent_pos[:, 2]
+    size2 = ent_pos[:, 3] - ent_pos[:, 2] + 1
+    ent2 = slice_batch(conv_out, begin2, size2)
+    
+    # slice context
+    # (-------)e1.first--e1.last(-------)e2.first--e2.last(-------)
+    size1 = ent_pos[:, 0]
+    begin1 = tf.zeros_like(size1, dtype=tf.int32)
+
+    begin2 = ent_pos[:, 1]+1
+    size2 = ent_pos[:, 2] - ent_pos[:, 1] - 1
+
+    begin3 = ent_pos[:, 3]+1
+    size3 = length-ent_pos[:, 3]-1
+
+    context = slice_batch_n(conv_out, [begin1, begin2, begin3], [size1, size2, size3])
+
+    ent1.set_shape(tf.TensorShape([None, None, NUM_FILTERS]))
+    ent2.set_shape(tf.TensorShape([None, None, NUM_FILTERS]))
+    context.set_shape(tf.TensorShape([None, None, NUM_FILTERS]))
+
+    return ent1, ent2, context
+    
   def conv_shallow(self, inputs):
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
                             'conv_block1',training=self.is_train, 
@@ -82,16 +123,16 @@ class CNNModel(BaseModel):
   def conv_deep(self, inputs):
     return residual_net(inputs, MAX_LEN, NUM_FILTERS, self.is_train)
 
-  def entity_attention(self, context, ent1, ent2, num_hops):
+  def entity_attention(self, context, ent1, ent2, num_hops=1):
     cont1 = context
     cont2 = context
     for i in range(num_hops):
       cont1 = multihead_attention(cont1, ent1, num_heads=10, 
-                                  dropout_rate=FLAGS.dropout_rate,
-                                  is_training=self.is_train, scope='att1%d'%i)
+                                  # dropout_rate=FLAGS.dropout_rate,
+                                  is_training=self.is_train, scope='att1-%d'%i)
       cont2 = multihead_attention(cont2, ent2, num_heads=10, 
-                                  dropout_rate=FLAGS.dropout_rate,
-                                  is_training=self.is_train, scope='att2%d'%i)
+                                  # dropout_rate=FLAGS.dropout_rate,
+                                  is_training=self.is_train, scope='att2-%d'%i)
       # cont1 = feedforward(cont1, num_units=[620, 310], scope='ffd1%d'%i)
       # cont2 = feedforward(cont2, num_units=[620, 310], scope='ffd2%d'%i)
       ent1 = cont1
@@ -111,11 +152,11 @@ class CNNModel(BaseModel):
     with tf.name_scope("loss"):
       one_hot = tf.one_hot(labels, NUM_CLASSES)
       # one_hot = label_smoothing(one_hot)
-      cross_entropy = tf.losses.softmax_cross_entropy(logits=logits, 
-                           onehot_labels=one_hot)
+      cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(labels=one_hot,
+                                logits=logits)
 
       regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-      loss = cross_entropy + sum(regularization_losses)
+      loss = tf.reduce_mean(cross_entropy) + sum(regularization_losses)
 
     return logits, loss
 

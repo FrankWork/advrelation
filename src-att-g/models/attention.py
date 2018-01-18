@@ -38,8 +38,8 @@ def normalize(inputs,
         params_shape = inputs_shape[-1:]
     
         mean, variance = tf.nn.moments(inputs, [-1], keep_dims=True)
-        beta= tf.Variable(tf.zeros(params_shape))
-        gamma = tf.Variable(tf.ones(params_shape))
+        beta= tf.get_variable('beta', params_shape, initializer=tf.zeros_initializer())
+        gamma = tf.get_variable('gamma', params_shape, initializer=tf.ones_initializer())
         normalized = (inputs - mean) / ( (variance + epsilon) ** (.5) )
         outputs = gamma * normalized + beta
         
@@ -131,12 +131,12 @@ def multihead_attention(queries,
         outputs = outputs / (K_.get_shape().as_list()[-1] ** 0.5)
         
         # Key Masking
-        key_masks = tf.sign(tf.abs(tf.reduce_sum(keys, axis=-1))) # (N, T_k)
-        key_masks = tf.tile(key_masks, [num_heads, 1]) # (h*N, T_k)
-        key_masks = tf.tile(tf.expand_dims(key_masks, 1), [1, tf.shape(queries)[1], 1]) # (h*N, T_q, T_k)
+        # key_masks = tf.sign(tf.abs(tf.reduce_sum(keys, axis=-1))) # (N, T_k)
+        # key_masks = tf.tile(key_masks, [num_heads, 1]) # (h*N, T_k)
+        # key_masks = tf.tile(tf.expand_dims(key_masks, 1), [1, tf.shape(queries)[1], 1]) # (h*N, T_q, T_k)
         
-        paddings = tf.ones_like(outputs)*(-2**32+1)
-        outputs = tf.where(tf.equal(key_masks, 0), paddings, outputs) # (h*N, T_q, T_k)
+        # paddings = tf.ones_like(outputs)*(-2**32+1)
+        # outputs = tf.where(tf.equal(key_masks, 0), paddings, outputs) # (h*N, T_q, T_k)
   
         # Causality = Future blinding
         if causality:
@@ -150,11 +150,11 @@ def multihead_attention(queries,
         # Activation
         outputs = tf.nn.softmax(outputs) # (h*N, T_q, T_k)
          
-        # Query Masking
-        query_masks = tf.sign(tf.abs(tf.reduce_sum(queries, axis=-1))) # (N, T_q)
-        query_masks = tf.tile(query_masks, [num_heads, 1]) # (h*N, T_q)
-        query_masks = tf.tile(tf.expand_dims(query_masks, -1), [1, 1, tf.shape(keys)[1]]) # (h*N, T_q, T_k)
-        outputs *= query_masks # broadcasting. (N, T_q, C)
+        # # Query Masking
+        # query_masks = tf.sign(tf.abs(tf.reduce_sum(queries, axis=-1))) # (N, T_q)
+        # query_masks = tf.tile(query_masks, [num_heads, 1]) # (h*N, T_q)
+        # query_masks = tf.tile(tf.expand_dims(query_masks, -1), [1, 1, tf.shape(keys)[1]]) # (h*N, T_q, T_k)
+        # outputs *= query_masks # broadcasting. (N, T_q, C)
           
         # Dropouts
         outputs = tf.layers.dropout(outputs, rate=dropout_rate, training=tf.convert_to_tensor(is_training))
