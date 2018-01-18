@@ -14,7 +14,7 @@ flags.DEFINE_float("lrn_rate", 0.001, "learning rate")
 
 FLAGS = flags.FLAGS
 
-MAX_LEN = 98
+MAX_LEN = 97
 NUM_CLASSES = 19
 # NUM_POWER_ITER = 1
 # SMALL_CONSTANT = 1e-6
@@ -47,13 +47,13 @@ class CNNModel(BaseModel):
       self.build_semeval_graph(semeval_data)
 
   def body(self, data):
-    label, length, ent_pos, sentence, position1, position2 = data
+    (label, length, ent_pos, sentence, pos1, pos2) = data
 
     # sentence and pos from embedding
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
 
-    pos1 = tf.nn.embedding_lookup(self.pos1_embed, position1)
-    pos2 = tf.nn.embedding_lookup(self.pos2_embed, position2)
+    pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
+    pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
     # conv
     sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)

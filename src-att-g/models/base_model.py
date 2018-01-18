@@ -59,3 +59,28 @@ def optimize(loss, lrn_rate, max_norm=None, decay_steps=None):
     train_op = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
     return train_op
 
+    
+def extract3d(inputs, begin, size, dtype=tf.float32):
+  '''
+  Args
+    inputs: [batch, length, dim]
+    begin: [batch]
+    size: [batch]
+  '''
+  max_size = tf.reduce_max(size)
+  batch_idx = tf.range(tf.shape(inputs)[0])
+
+  # [batch, 1]
+  begin = tf.expand_dims(begin, axis=-1)
+  size = tf.expand_dims(size, axis=-1)
+
+  # [batch, 2]
+  begin = tf.concat([begin, tf.zeros_like(begin)], axis=-1)
+  size = tf.concat([size, -1*tf.ones_like(size)], axis=-1)
+
+  def map_fn(idx):
+    slice = tf.slice(inputs[idx], begin[idx], size[idx])
+    pad = tf.pad(slice, [[0, max_size-size[idx][0]], [0, 0]])
+    return pad
+
+  return tf.map_fn(map_fn, batch_idx, dtype=dtype)

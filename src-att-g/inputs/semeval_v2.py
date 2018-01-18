@@ -82,56 +82,22 @@ class SemEvalCleanedRecordData(dataset.RecordDataset):
 
     # load from disk
     label = feat_dict['label']
-    length = feat_dict['length']
+    length = tf.cast(feat_dict['length'], tf.int32)
     ent_pos = tf.cast(feat_dict['ent_pos'], tf.int32)
     sentence = tf.sparse_tensor_to_dense(feat_dict['sentence'])
     pos1 = tf.sparse_tensor_to_dense(feat_dict['pos1'])
     pos2 = tf.sparse_tensor_to_dense(feat_dict['pos2'])
 
-    # extract entities and context from tensor
-    # --------e1.x++++e1.y-------e2.x****e2.y--------
-    begin1 = [ent_pos[0]]
-    size1 = [ent_pos[1]+1-ent_pos[0] ]
-    ent1 = tf.slice(sentence, begin1, size1)
-    ent1_pos1 = tf.slice(pos1, begin1, size1)
-    ent1_pos2 = tf.slice(pos2, begin1, size1)
-
-    begin2 = [ent_pos[2] ]
-    size2 = [ent_pos[3]+1-ent_pos[2] ]
-    ent2 = tf.slice(sentence, begin2, size2)
-    ent2_pos1 = tf.slice(pos1, begin2, size2)
-    ent2_pos2 = tf.slice(pos2, begin2, size2)
-
-    
-    begin1 = [0]
-    size1 = [ent_pos[0] ]
-    cont1 = tf.slice(sentence, begin1,  size1)
-
-    begin2 = [ent_pos[1]+1]
-    size2 = [ent_pos[2]-ent_pos[1]-1]
-    cont2 = tf.slice(sentence, begin2, size2)
-
-    # begin3 = [ent_pos[3]+1]
-    # size3 = [length-ent_pos[3]-1]
-    # cont3 = tf.slice(sentence, begin3, size3)
-
-    # context = tf.concat([cont1, cont2, cont3], axis=0)
-    context = cont2
-
+    # transformed tensor
+    # begin = tf.convert_to_tensor([ent_pos[0], ent_pos[2]])
+    # size = tf.convert_to_tensor([ent_pos[1]-ent_pos[0]+1, ent_pos[3]-ent_pos[2]+1])
 
     return (label, length, ent_pos, 
-            sentence, pos1, pos2, 
-            ent1, ent1_pos1, ent1_pos2,
-            ent2, ent2_pos1, ent2_pos2,
-            context)
-
+            sentence, pos1, pos2)
   
   def padded_shapes(self):
-    return ([], [], [4], 
-            [None], [None], [None], 
-            [None], [None], [None], 
-            [None], [None], [None],
-            [None])
+    return ([], [], [4],
+            [None], [None], [None])
 
 
 def write_results(predictions):

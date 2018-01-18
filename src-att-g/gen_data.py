@@ -15,7 +15,7 @@ vocab_mgr = dataset.VocabMgr()
 vocab_mgr.generate_vocab(semeval_text.tokens())
 
 # trim embedding
-# vocab_mgr.trim_pretrain_embedding()
+vocab_mgr.trim_pretrain_embedding()
 
 # build SemEval record data
 semeval_text.set_vocab_mgr(vocab_mgr)
