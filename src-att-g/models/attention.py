@@ -1,175 +1,230 @@
-'''
-June 2017 by kyubyong park. 
-kbpark.linguist@gmail.com.
-https://www.github.com/kyubyong/transformer
-'''
-
 import tensorflow as tf
 
-def label_smoothing(inputs, epsilon=0.1):
-  '''Applies label smoothing. See https://arxiv.org/abs/1512.00567.
-  
+def mh_attention(x, output_depth, num_heads):
+  return multihead_attention(x,
+                        None,
+                        None,
+                        output_depth,
+                        output_depth,
+                        output_depth,
+                        num_heads)
+
+def multihead_attention(query_antecedent,
+                        memory_antecedent,
+                        bias,
+                        total_key_depth,
+                        total_value_depth,
+                        output_depth,
+                        num_heads,
+                        dropout_rate=0.0,
+                        q_filter_width=1,
+                        kv_filter_width=1,
+                        q_padding="VALID",
+                        kv_padding="VALID",
+                        num_memory_blocks=2,
+                        name=None):
+  """Multihead scaled-dot-product attention with input/output transformations.
+
   Args:
-    inputs: A 3d tensor with shape of [N, T, V], where V is the number of vocabulary.
-    epsilon: Smoothing rate.
-  '''
-  K = inputs.get_shape().as_list()[-1] # number of channels
-  return ((1-epsilon) * inputs) + (epsilon / K)
+    query_antecedent: a Tensor with shape [batch, length_q, channels]
+    memory_antecedent: a Tensor with shape [batch, length_m, channels] or None
+    bias: bias Tensor (see attention_bias())
+    total_key_depth: an integer
+    total_value_depth: an integer
+    output_depth: an integer
+    num_heads: an integer dividing total_key_depth and total_value_depth
+    dropout_rate: a floating point number
+    q_filter_width: An integer specifying how wide you want the query to be.
+    kv_filter_width: An integer specifying how wide you want the keys and values
+                     to be.
+    q_padding: One of "VALID", "SAME" or "LEFT". Default is VALID: No padding.
+               kv_padding: One of "VALID", "SAME" or "LEFT". Default is "VALID":
+               no padding.
+    num_memory_blocks: Integer option to indicate how many memory blocks to look
+                       at.
+    name: an optional string.
 
-def normalize(inputs, 
-              epsilon = 1e-8,
-              scope="ln",
-              reuse=None):
-    '''Applies layer normalization.
-    
-    Args:
-      inputs: A tensor with 2 or more dimensions, where the first dimension has
-        `batch_size`.
-      epsilon: A floating number. A very small number for preventing ZeroDivision Error.
-      scope: Optional scope for `variable_scope`.
-      reuse: Boolean, whether to reuse the weights of a previous layer
-        by the same name.
-      
-    Returns:
-      A tensor with the same shape and data dtype as `inputs`.
-    '''
-    with tf.variable_scope(scope, reuse=reuse):
-        inputs_shape = inputs.get_shape()
-        params_shape = inputs_shape[-1:]
-    
-        mean, variance = tf.nn.moments(inputs, [-1], keep_dims=True)
-        beta= tf.get_variable('beta', params_shape, initializer=tf.zeros_initializer())
-        gamma = tf.get_variable('gamma', params_shape, initializer=tf.ones_initializer())
-        normalized = (inputs - mean) / ( (variance + epsilon) ** (.5) )
-        outputs = gamma * normalized + beta
-        
-    return outputs
+  Returns:
+    The result of the attention transformation. The output shape is
+        [batch_size, length_q, hidden_dim]
+    unless the cache dict is provided in which case only the last memory
+    position is calculated and the output shape is [batch_size, 1, hidden_dim]
+    Optionaly returns an additional loss parameters (ex: load balance loss for
+    the experts) returned by the attention_type function.
+
+  Raises:
+    ValueError: if the key depth or value depth are not divisible by the
+      number of attention heads.
+  """
+  if total_key_depth % num_heads != 0:
+    raise ValueError("Key depth (%d) must be divisible by the number of "
+                     "attention heads (%d)." % (total_key_depth, num_heads))
+  if total_value_depth % num_heads != 0:
+    raise ValueError("Value depth (%d) must be divisible by the number of "
+                     "attention heads (%d)." % (total_value_depth, num_heads))
+  with tf.variable_scope(
+      name,
+      default_name="multihead_attention",
+      values=[query_antecedent, memory_antecedent]):
+    q, k, v = compute_qkv(query_antecedent, memory_antecedent, total_key_depth,
+                          total_value_depth, q_filter_width, kv_filter_width,
+                          q_padding, kv_padding)
+
+    q = split_heads(q, num_heads)
+    k = split_heads(k, num_heads)
+    v = split_heads(v, num_heads)
+    key_depth_per_head = total_key_depth // num_heads
+    q *= key_depth_per_head**-0.5
+
+    x = dot_product_attention(q, k, v, bias, dropout_rate)
+
+    x = combine_heads(x)
+    x = tf.layers.dense(
+        x, output_depth, use_bias=False, name="output_transform")
+    return x
 
 
-def feedforward(inputs, 
-                num_units=[2048, 512],
-                scope="multihead_attention", 
-                reuse=None):
-    '''Point-wise feed forward net.
-    
-    Args:
-      inputs: A 3d tensor with shape of [N, T, C].
-      num_units: A list of two integers.
-      scope: Optional scope for `variable_scope`.
-      reuse: Boolean, whether to reuse the weights of a previous layer
-        by the same name.
-        
-    Returns:
-      A 3d tensor with the same shape and dtype as inputs
-    '''
-    with tf.variable_scope(scope, reuse=reuse):
-        # Inner layer
-        # params = {"inputs": inputs, "filters": num_units[0], "kernel_size": 1,
-        #           "activation": tf.nn.relu, "use_bias": True}
-        # outputs = tf.layers.conv1d(**params)
-        outputs = tf.layers.dense(inputs, num_units[0], activation=tf.nn.relu)
-        
-        # Readout layer
-        # params = {"inputs": outputs, "filters": num_units[1], "kernel_size": 1,
-        #           "activation": None, "use_bias": True}
-        # outputs = tf.layers.conv1d(**params)
-        outputs = tf.layers.dense(outputs, num_units[1])
-        
-        # Residual connection
-        outputs += inputs
-        
-        # Normalize
-        outputs = normalize(outputs)
-    
-    return outputs
+def compute_qkv(query_antecedent,
+                memory_antecedent,
+                total_key_depth,
+                total_value_depth,
+                q_filter_width=1,
+                kv_filter_width=1,
+                q_padding="VALID",
+                kv_padding="VALID"):
+  """Computes query, key and value.
 
-def multihead_attention(queries, 
-                        keys, 
-                        num_units=None, 
-                        num_heads=8, 
-                        dropout_rate=0,
-                        is_training=True,
-                        causality=False,
-                        scope="multihead_attention", 
-                        reuse=None):
-    '''Applies multihead attention.
-    
-    Args:
-      queries: A 3d tensor with shape of [N, T_q, C_q].
-      keys: A 3d tensor with shape of [N, T_k, C_k].
-      num_units: A scalar. Attention size.
-      dropout_rate: A floating point number.
-      is_training: Boolean. Controller of mechanism for dropout.
-      causality: Boolean. If true, units that reference the future are masked. 
-      num_heads: An int. Number of heads.
-      scope: Optional scope for `variable_scope`.
-      reuse: Boolean, whether to reuse the weights of a previous layer
-        by the same name.
-        
-    Returns
-      A 3d tensor with shape of (N, T_q, C)  
-    '''
-    with tf.variable_scope(scope, reuse=reuse):
-        # Set the fall back option for num_units
-        if num_units is None:
-            num_units = queries.get_shape().as_list()[-1]
-        
-        # Linear projections
-        Q = tf.layers.dense(queries, num_units, activation=tf.nn.relu) # (N, T_q, C)
-        K = tf.layers.dense(keys, num_units, activation=tf.nn.relu) # (N, T_k, C)
-        V = tf.layers.dense(keys, num_units, activation=tf.nn.relu) # (N, T_k, C)
-        
-        # Split and concat
-        Q_ = tf.concat(tf.split(Q, num_heads, axis=2), axis=0) # (h*N, T_q, C/h) 
-        K_ = tf.concat(tf.split(K, num_heads, axis=2), axis=0) # (h*N, T_k, C/h) 
-        V_ = tf.concat(tf.split(V, num_heads, axis=2), axis=0) # (h*N, T_k, C/h) 
+  Args:
+    query_antecedent: a Tensor with shape [batch, length_q, channels]
+    memory_antecedent: a Tensor with shape [batch, length_m, channels]
+    total_key_depth: an integer
+    total_value_depth: and integer
+    q_filter_width: An integer specifying how wide you want the query to be.
+    kv_filter_width: An integer specifying how wide you want the keys and values
+    to be.
+    q_padding: One of "VALID", "SAME" or "LEFT". Default is VALID: No padding.
+    kv_padding: One of "VALID", "SAME" or "LEFT". Default is VALID: No padding.
 
-        # Multiplication
-        outputs = tf.matmul(Q_, tf.transpose(K_, [0, 2, 1])) # (h*N, T_q, T_k)
-        
-        # Scale
-        outputs = outputs / (K_.get_shape().as_list()[-1] ** 0.5)
-        
-        # Key Masking
-        # key_masks = tf.sign(tf.abs(tf.reduce_sum(keys, axis=-1))) # (N, T_k)
-        # key_masks = tf.tile(key_masks, [num_heads, 1]) # (h*N, T_k)
-        # key_masks = tf.tile(tf.expand_dims(key_masks, 1), [1, tf.shape(queries)[1], 1]) # (h*N, T_q, T_k)
-        
-        # paddings = tf.ones_like(outputs)*(-2**32+1)
-        # outputs = tf.where(tf.equal(key_masks, 0), paddings, outputs) # (h*N, T_q, T_k)
-  
-        # Causality = Future blinding
-        if causality:
-            diag_vals = tf.ones_like(outputs[0, :, :]) # (T_q, T_k)
-            tril = tf.contrib.linalg.LinearOperatorTriL(diag_vals).to_dense() # (T_q, T_k)
-            masks = tf.tile(tf.expand_dims(tril, 0), [tf.shape(outputs)[0], 1, 1]) # (h*N, T_q, T_k)
-   
-            paddings = tf.ones_like(masks)*(-2**32+1)
-            outputs = tf.where(tf.equal(masks, 0), paddings, outputs) # (h*N, T_q, T_k)
-  
-        # Activation
-        outputs = tf.nn.softmax(outputs) # (h*N, T_q, T_k)
-         
-        # # Query Masking
-        # query_masks = tf.sign(tf.abs(tf.reduce_sum(queries, axis=-1))) # (N, T_q)
-        # query_masks = tf.tile(query_masks, [num_heads, 1]) # (h*N, T_q)
-        # query_masks = tf.tile(tf.expand_dims(query_masks, -1), [1, 1, tf.shape(keys)[1]]) # (h*N, T_q, T_k)
-        # outputs *= query_masks # broadcasting. (N, T_q, C)
-          
-        # Dropouts
-        outputs = tf.layers.dropout(outputs, rate=dropout_rate, training=tf.convert_to_tensor(is_training))
-               
-        # Weighted sum
-        outputs = tf.matmul(outputs, V_) # ( h*N, T_q, C/h)
-        
-        # Restore shape
-        outputs = tf.concat(tf.split(outputs, num_heads, axis=0), axis=2 ) # (N, T_q, C)
-              
-        # Residual connection
-        outputs += queries
-              
-        # Normalize
-        outputs = normalize(outputs) # (N, T_q, C)
- 
-    return outputs
-  
+  Returns:
+    q, k, v : [batch, length, depth] tensors
+  """
+  if memory_antecedent is None:
+    memory_antecedent = query_antecedent
+  def _compute(inp, depth, filter_width, padding, name):
+    if filter_width == 1:
+      return tf.layers.dense(inp, depth, use_bias=False, name=name)
+    else:
+      return common_layers.conv1d(inp, depth, filter_width, padding, name=name)
+  q = _compute(
+      query_antecedent, total_key_depth, q_filter_width, q_padding, "q")
+  k = _compute(
+      memory_antecedent, total_key_depth, kv_filter_width, kv_padding, "k")
+  v = _compute(
+      memory_antecedent, total_value_depth, kv_filter_width, kv_padding, "v")
+  return q, k, v
+
+
+def dot_product_attention(q,
+                          k,
+                          v,
+                          bias=None,
+                          dropout_rate=0.0,
+                          name=None):
+  """dot-product attention.
+
+  Args:
+    q: a Tensor with shape [batch, heads, length_q, depth_k]
+    k: a Tensor with shape [batch, heads, length_kv, depth_k]
+    v: a Tensor with shape [batch, heads, length_kv, depth_v]
+    bias: bias Tensor (see attention_bias())
+    dropout_rate: a floating point number
+    name: an optional string
+
+  Returns:
+    A Tensor.
+  """
+  with tf.variable_scope(
+      name, default_name="dot_product_attention", values=[q, k, v]) as scope:
+    # [batch, num_heads, query_length, memory_length]
+    logits = tf.matmul(q, k, transpose_b=True)
+    if bias is not None:
+      logits += bias
+    weights = tf.nn.softmax(logits, name="attention_weights")
+
+    # FIXME: if is_train:
+    # dropping out the attention links for each of the heads
+    weights = tf.nn.dropout(weights, 1.0 - dropout_rate)
+    return tf.matmul(weights, v)
+
+def combine_heads(x):
+  """Inverse of split_heads.
+
+  Args:
+    x: a Tensor with shape [batch, num_heads, length, channels / num_heads]
+
+  Returns:
+    a Tensor with shape [batch, length, channels]
+  """
+  return combine_last_two_dimensions(tf.transpose(x, [0, 2, 1, 3]))
+
+def combine_last_two_dimensions(x):
+  """Reshape x so that the last two dimension become one.
+
+  Args:
+    x: a Tensor with shape [..., a, b]
+
+  Returns:
+    a Tensor with shape [..., ab]
+  """
+  x_shape = shape_list(x)
+  a, b = x_shape[-2:]
+  return tf.reshape(x, x_shape[:-2] + [a * b])
+
+def split_heads(x, num_heads):
+  """Split channels (dimension 2) into multiple heads (becomes dimension 1).
+
+  Args:
+    x: a Tensor with shape [batch, length, channels]
+    num_heads: an integer
+
+  Returns:
+    a Tensor with shape [batch, num_heads, length, channels / num_heads]
+  """
+  return tf.transpose(split_last_dimension(x, num_heads), [0, 2, 1, 3])
+
+def split_last_dimension(x, n):
+  """Reshape x so that the last dimension becomes two dimensions.
+
+  The first of these two dimensions is n.
+
+  Args:
+    x: a Tensor with shape [..., m]
+    n: an integer.
+
+  Returns:
+    a Tensor with shape [..., n, m/n]
+  """
+  x_shape = shape_list(x)
+  m = x_shape[-1]
+  if isinstance(m, int) and isinstance(n, int):
+    assert m % n == 0
+  return tf.reshape(x, x_shape[:-1] + [n, m // n])
+
+def shape_list(x):
+  """Return list of dims, statically where possible."""
+  x = tf.convert_to_tensor(x)
+
+  # If unknown rank, return dynamic shape
+  if x.get_shape().dims is None:
+    return tf.shape(x)
+
+  static = x.get_shape().as_list()
+  shape = tf.shape(x)
+
+  ret = []
+  for i in xrange(len(static)):
+    dim = static[i]
+    if dim is None:
+      dim = shape[i]
+    ret.append(dim)
+  return ret
