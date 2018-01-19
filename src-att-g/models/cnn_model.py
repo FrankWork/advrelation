@@ -42,6 +42,7 @@ class CNNModel(BaseModel):
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
 
     self.tensors = dict()
+    self.cache = list()
 
     with tf.variable_scope('semeval_graph'):
       self.build_semeval_graph(semeval_data)
@@ -58,20 +59,51 @@ class CNNModel(BaseModel):
     # conv
     sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
     inputs = tf.concat([sentence, pos1, pos2], axis=2)
+    # self.cache.append(inputs)
+
+    entities = self.slice_entity(inputs, ent_pos, length)
+    entities = multihead_attention(entities, inputs, None, NUM_FILTERS, NUM_FILTERS, NUM_FILTERS, 10)
+    # self.cache.append(inputs)
+
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
                             'conv_block1',training=self.is_train, 
                              initializer=self.he_normal)
-    # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
-    # pool_out1 = tf.squeeze(pool_out, axis=1)
+    pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
+    pool_out1 = tf.squeeze(pool_out, axis=1)
+    # pool_out1 = tf.reduce_max(conv_out, axis=1)
+    # self.cache.append(conv_out)
 
-    ent1, ent2, context = self.slice_ent_and_context(conv_out, ent_pos, length)
-    pool_out2 = self.entity_attention(context, ent1, ent2)
+    # ent1, ent2, context = self.slice_ent_and_context(conv_out, ent_pos, length)
+    # pool_out2 = self.entity_attention(conv_out, ent1, ent2)
+    pool_out2 = self.entity_attention(conv_out, entities)
 
-    # pool_out = tf.concat([pool_out1, pool_out2], axis=1)
-    pool_out = pool_out2
+    pool_out = tf.concat([pool_out1, pool_out2], axis=1)
+    # pool_out = pool_out1
 
     body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
     return label, body_out
+
+  def slice_entity(self, inputs, ent_pos, length):
+    '''
+    Args
+      conv_out: [batch, max_len, filters]
+      ent_pos:  [batch, 4]
+      length:   [batch]
+    '''
+    # slice ent1
+    # -------(e1.first--e1.last)-------e2.first--e2.last-------
+    begin1 = ent_pos[:, 0]
+    size1 = ent_pos[:, 1] - ent_pos[:, 0] + 1
+
+    # slice ent2
+    # -------e1.first--e1.last-------(e2.first--e2.last)-------
+    begin2 = ent_pos[:, 2]
+    size2 = ent_pos[:, 3] - ent_pos[:, 2] + 1
+    
+    entities = slice_batch_n(inputs, [begin1, begin2], [size1, size2])
+    entities.set_shape(tf.TensorShape([None, None, NUM_FILTERS]))
+
+    return entities
 
   def slice_ent_and_context(self, conv_out, ent_pos, length):
     '''
@@ -123,27 +155,42 @@ class CNNModel(BaseModel):
   def conv_deep(self, inputs):
     return residual_net(inputs, MAX_LEN, NUM_FILTERS, self.is_train)
 
-  def entity_attention(self, context, ent1, ent2, num_hops=1):
-    cont1 = context
-    cont2 = context
-    for i in range(num_hops):
-      cont1 = multihead_attention(cont1, ent1, num_heads=10, 
-                                  # dropout_rate=FLAGS.dropout_rate,
-                                  is_training=self.is_train, scope='att1-%d'%i)
-      cont2 = multihead_attention(cont2, ent2, num_heads=10, 
-                                  # dropout_rate=FLAGS.dropout_rate,
-                                  is_training=self.is_train, scope='att2-%d'%i)
-      # cont1 = feedforward(cont1, num_units=[620, 310], scope='ffd1%d'%i)
-      # cont2 = feedforward(cont2, num_units=[620, 310], scope='ffd2%d'%i)
-      ent1 = cont1
-      ent2 = cont2
+  def entity_attention_v0(self, context, ent1, ent2, num_hops=1):
+    def tanh_att(ent, context, name, keepdims=True):
+      cont_len = tf.shape(context)[1]
+      ent_tile = tf.tile(ent, [1, cont_len, 1])
+      inputs = tf.concat([context, ent_tile], axis=2)
+      weight = tf.layers.dense(inputs, 1, activation=tf.nn.tanh, 
+                               kernel_regularizer=None, 
+                               name=name, reuse=tf.AUTO_REUSE)
+      weight = tf.nn.softmax(weight, axis=1)
+      att_out = tf.multiply(context, weight)
+      return tf.reduce_sum(att_out, axis=1, keepdims=keepdims)
 
-    ent1 = tf.reduce_mean(ent1, axis=1) # (batch, embed)
-    ent2 = tf.reduce_mean(ent2, axis=1)
-    entities = tf.concat([ent1, ent2], axis=-1)
-    # entities = tf.squeeze(entities, axis=1)
+    ent1 = tf.reduce_mean(ent1, axis=1, keepdims=True)
+    ent2 = tf.reduce_mean(ent2, axis=1, keepdims=True)
+    ent = tf.concat([ent1, ent2], axis=2)
+
+    out = tanh_att(ent, context, 'att', keepdims=False)
+
+    return out
+
+  def entity_attention(self, context, entities, num_hops=1):
+    def tanh_att(ent, context, name, keepdims=True):
+      cont_len = tf.shape(context)[1]
+      ent_tile = tf.tile(ent, [1, cont_len, 1])
+      inputs = tf.concat([context, ent_tile], axis=2)
+      weight = tf.layers.dense(inputs, 1, activation=tf.nn.tanh, 
+                               kernel_regularizer=None, 
+                               name=name, reuse=tf.AUTO_REUSE)
+      weight = tf.nn.softmax(weight, axis=1)
+      att_out = tf.multiply(context, weight)
+      return tf.reduce_sum(att_out, axis=1, keepdims=keepdims)
+
+    ent = tf.reduce_mean(entities, axis=1, keepdims=True)
     
-    return entities
+    out = tanh_att(ent, context, 'att', keepdims=False)
+    return out
 
   def top(self, body_out, labels):
     logits = tf.layers.dense(body_out, NUM_CLASSES, kernel_regularizer=self.regularizer)

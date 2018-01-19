@@ -1,13 +1,15 @@
-import tensorflow as tf
+'''
+Q: Lq, d
+K: L,  d   => Lq, dv
+V: L,  dv
 
-def mh_attention(x, output_depth, num_heads):
-  return multihead_attention(x,
-                        None,
-                        None,
-                        output_depth,
-                        output_depth,
-                        output_depth,
-                        num_heads)
+
+Attention(Q,K,V) = softmax(QK^T/sqrt(d))V
+
+Lq,d x d,L => Lq,L x L,dv => Lq,dv
+'''
+
+import tensorflow as tf
 
 def multihead_attention(query_antecedent,
                         memory_antecedent,
@@ -17,11 +19,6 @@ def multihead_attention(query_antecedent,
                         output_depth,
                         num_heads,
                         dropout_rate=0.0,
-                        q_filter_width=1,
-                        kv_filter_width=1,
-                        q_padding="VALID",
-                        kv_padding="VALID",
-                        num_memory_blocks=2,
                         name=None):
   """Multihead scaled-dot-product attention with input/output transformations.
 
@@ -34,14 +31,6 @@ def multihead_attention(query_antecedent,
     output_depth: an integer
     num_heads: an integer dividing total_key_depth and total_value_depth
     dropout_rate: a floating point number
-    q_filter_width: An integer specifying how wide you want the query to be.
-    kv_filter_width: An integer specifying how wide you want the keys and values
-                     to be.
-    q_padding: One of "VALID", "SAME" or "LEFT". Default is VALID: No padding.
-               kv_padding: One of "VALID", "SAME" or "LEFT". Default is "VALID":
-               no padding.
-    num_memory_blocks: Integer option to indicate how many memory blocks to look
-                       at.
     name: an optional string.
 
   Returns:
@@ -67,8 +56,7 @@ def multihead_attention(query_antecedent,
       default_name="multihead_attention",
       values=[query_antecedent, memory_antecedent]):
     q, k, v = compute_qkv(query_antecedent, memory_antecedent, total_key_depth,
-                          total_value_depth, q_filter_width, kv_filter_width,
-                          q_padding, kv_padding)
+                          total_value_depth)
 
     q = split_heads(q, num_heads)
     k = split_heads(k, num_heads)
@@ -87,11 +75,7 @@ def multihead_attention(query_antecedent,
 def compute_qkv(query_antecedent,
                 memory_antecedent,
                 total_key_depth,
-                total_value_depth,
-                q_filter_width=1,
-                kv_filter_width=1,
-                q_padding="VALID",
-                kv_padding="VALID"):
+                total_value_depth):
   """Computes query, key and value.
 
   Args:
@@ -99,30 +83,16 @@ def compute_qkv(query_antecedent,
     memory_antecedent: a Tensor with shape [batch, length_m, channels]
     total_key_depth: an integer
     total_value_depth: and integer
-    q_filter_width: An integer specifying how wide you want the query to be.
-    kv_filter_width: An integer specifying how wide you want the keys and values
-    to be.
-    q_padding: One of "VALID", "SAME" or "LEFT". Default is VALID: No padding.
-    kv_padding: One of "VALID", "SAME" or "LEFT". Default is VALID: No padding.
-
   Returns:
     q, k, v : [batch, length, depth] tensors
   """
   if memory_antecedent is None:
     memory_antecedent = query_antecedent
-  def _compute(inp, depth, filter_width, padding, name):
-    if filter_width == 1:
-      return tf.layers.dense(inp, depth, use_bias=False, name=name)
-    else:
-      return common_layers.conv1d(inp, depth, filter_width, padding, name=name)
-  q = _compute(
-      query_antecedent, total_key_depth, q_filter_width, q_padding, "q")
-  k = _compute(
-      memory_antecedent, total_key_depth, kv_filter_width, kv_padding, "k")
-  v = _compute(
-      memory_antecedent, total_value_depth, kv_filter_width, kv_padding, "v")
+  
+  q = tf.layers.dense(query_antecedent, total_key_depth, use_bias=False, name="q")
+  k = tf.layers.dense(memory_antecedent, total_key_depth, use_bias=False, name="k")
+  v = tf.layers.dense(memory_antecedent, total_value_depth, use_bias=False, name="v")
   return q, k, v
-
 
 def dot_product_attention(q,
                           k,
@@ -222,7 +192,7 @@ def shape_list(x):
   shape = tf.shape(x)
 
   ret = []
-  for i in xrange(len(static)):
+  for i in range(len(static)):
     dim = static[i]
     if dim is None:
       dim = shape[i]

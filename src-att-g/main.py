@@ -122,7 +122,7 @@ def main(_):
       for tensor in tf.trainable_variables():
         tf.logging.info(tensor.op.name)
       
-      # for tensor in sess.run(m_train.out_t):
+      # for tensor in sess.run(m_train.cache):
       #   print(tensor.shape)
       # exit()
     
