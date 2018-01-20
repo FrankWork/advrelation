@@ -324,3 +324,59 @@ Epoch 47 sem 0.35 0.89 0.7917 time 11.92
 Epoch 48 sem 0.34 0.90 0.7917 time 11.36
 Epoch 49 sem 0.34 0.89 0.7874 time 11.44
 Done training, best_epoch: 40, best_acc: 0.7991
+
+
+$ entity input mh attention + cnn + max pool, sentence + cnn + max pool
+
+Epoch 0 sem 2.65 0.22 0.3648 time 7.55
+Epoch 1 sem 1.96 0.40 0.5568 time 6.01
+Epoch 2 sem 1.54 0.53 0.6424 time 5.22
+Epoch 3 sem 1.30 0.61 0.6910 time 5.29
+Epoch 4 sem 1.16 0.65 0.7160 time 5.26
+Epoch 5 sem 1.05 0.68 0.7342 time 5.70
+Epoch 6 sem 0.97 0.71 0.7513 time 6.20
+Epoch 7 sem 0.91 0.72 0.7660 time 6.46
+Epoch 8 sem 0.85 0.75 0.7706 time 5.89
+Epoch 9 sem 0.81 0.76 0.7717 time 6.05
+Epoch 10 sem 0.78 0.77 0.7756 time 5.59
+Epoch 11 sem 0.75 0.77 0.7763 time 5.57
+Epoch 12 sem 0.72 0.78 0.7838 time 5.63
+Epoch 13 sem 0.67 0.79 0.7803 time 5.44
+Epoch 14 sem 0.67 0.79 0.7913 time 5.06
+Epoch 15 sem 0.67 0.80 0.7863 time 6.05
+Epoch 16 sem 0.63 0.80 0.7874 time 4.99
+Epoch 17 sem 0.62 0.82 0.7931 time 5.05
+Epoch 18 sem 0.60 0.82 0.7910 time 5.65
+Epoch 19 sem 0.57 0.83 0.7910 time 4.95
+Epoch 20 sem 0.56 0.83 0.7910 time 4.98
+Epoch 21 sem 0.55 0.83 0.7960 time 5.02
+Epoch 22 sem 0.53 0.84 0.8013 time 5.46
+Epoch 23 sem 0.53 0.84 0.7967 time 5.53
+Epoch 24 sem 0.52 0.84 0.7992 time 5.07
+Epoch 25 sem 0.49 0.85 0.7935 time 4.99
+Epoch 26 sem 0.49 0.84 0.7928 time 4.97
+Epoch 27 sem 0.49 0.85 0.7953 time 4.93
+Epoch 28 sem 0.46 0.86 0.7974 time 5.05
+Epoch 29 sem 0.46 0.86 0.7978 time 4.98
+Epoch 30 sem 0.46 0.86 0.7963 time 5.05
+Epoch 31 sem 0.44 0.87 0.7903 time 4.99
+Epoch 32 sem 0.44 0.87 0.7945 time 5.08
+Epoch 33 sem 0.42 0.87 0.7917 time 4.88
+Epoch 34 sem 0.42 0.88 0.7960 time 5.01
+Epoch 35 sem 0.42 0.88 0.7953 time 5.23
+Epoch 36 sem 0.39 0.88 0.7988 time 5.05
+Epoch 37 sem 0.40 0.88 0.7988 time 4.96
+Epoch 38 sem 0.38 0.89 0.7981 time 5.04
+Epoch 39 sem 0.39 0.89 0.8003 time 5.14
+Epoch 40 sem 0.38 0.89 0.7938 time 4.90
+Epoch 41 sem 0.36 0.89 0.7949 time 4.89
+Epoch 42 sem 0.37 0.90 0.7985 time 4.98
+Epoch 43 sem 0.35 0.90 0.8017 time 5.05
+Epoch 44 sem 0.37 0.89 0.7999 time 5.31
+Epoch 45 sem 0.35 0.90 0.8010 time 4.91
+Epoch 46 sem 0.34 0.90 0.7988 time 5.07
+Epoch 47 sem 0.34 0.90 0.8006 time 5.05
+Epoch 48 sem 0.35 0.90 0.8049 time 5.00
+Epoch 49 sem 0.32 0.91 0.7989 time 5.10
+Done training, best_epoch: 48, best_acc: 0.8049
+duration: 0.07 hours

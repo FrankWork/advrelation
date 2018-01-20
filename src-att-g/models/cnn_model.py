@@ -44,8 +44,8 @@ class CNNModel(BaseModel):
     self.tensors = dict()
     self.cache = list()
 
-    with tf.variable_scope('semeval_graph'):
-      self.build_semeval_graph(semeval_data)
+    # with tf.variable_scope('semeval_graph'):
+    self.build_semeval_graph(semeval_data)
 
   def body(self, data):
     (label, length, ent_pos, sentence, pos1, pos2) = data
@@ -62,22 +62,29 @@ class CNNModel(BaseModel):
     # self.cache.append(inputs)
 
     entities = self.slice_entity(inputs, ent_pos, length)
-    entities = multihead_attention(entities, inputs, None, NUM_FILTERS, NUM_FILTERS, NUM_FILTERS, 10)
-    # self.cache.append(inputs)
+    entities = multihead_attention(entities, inputs, None, NUM_FILTERS, NUM_FILTERS, NUM_FILTERS, 10, 
+                                  name='input-mh-att')
+    # entities = multihead_attention(entities, inputs, None, NUM_FILTERS, NUM_FILTERS, NUM_FILTERS, 10, 
+    #                               name='input-mh-att-2')
+
+    conv_ent = conv_block_v2(entities, KERNEL_SIZE, NUM_FILTERS,
+                            'conv_block1',training=self.is_train, 
+                             initializer=self.he_normal, reuse=tf.AUTO_REUSE)
+    pool_ent = tf.layers.max_pooling1d(conv_ent, MAX_LEN, MAX_LEN, padding='same')
+    pool_ent = tf.squeeze(pool_ent, axis=1)
 
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
                             'conv_block1',training=self.is_train, 
-                             initializer=self.he_normal)
-    pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
-    pool_out1 = tf.squeeze(pool_out, axis=1)
-    # pool_out1 = tf.reduce_max(conv_out, axis=1)
+                             initializer=self.he_normal, reuse=tf.AUTO_REUSE)
+    # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
+    # pool_out = tf.squeeze(pool_out, axis=1)
+    pool_max = tf.reduce_max(conv_out, axis=1)
     # self.cache.append(conv_out)
 
     # ent1, ent2, context = self.slice_ent_and_context(conv_out, ent_pos, length)
-    # pool_out2 = self.entity_attention(conv_out, ent1, ent2)
-    pool_out2 = self.entity_attention(conv_out, entities)
+    # pool_att = self.entity_attention(context, ent1, ent2)
 
-    pool_out = tf.concat([pool_out1, pool_out2], axis=1)
+    pool_out = tf.concat([pool_ent, pool_max], axis=1)
     # pool_out = pool_out1
 
     body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
@@ -155,7 +162,7 @@ class CNNModel(BaseModel):
   def conv_deep(self, inputs):
     return residual_net(inputs, MAX_LEN, NUM_FILTERS, self.is_train)
 
-  def entity_attention_v0(self, context, ent1, ent2, num_hops=1):
+  def entity_attention(self, context, ent1, ent2, num_hops=1):
     def tanh_att(ent, context, name, keepdims=True):
       cont_len = tf.shape(context)[1]
       ent_tile = tf.tile(ent, [1, cont_len, 1])
@@ -175,7 +182,7 @@ class CNNModel(BaseModel):
 
     return out
 
-  def entity_attention(self, context, entities, num_hops=1):
+  def entity_attention_v1(self, context, entities, num_hops=1):
     def tanh_att(ent, context, name, keepdims=True):
       cont_len = tf.shape(context)[1]
       ent_tile = tf.tile(ent, [1, cont_len, 1])

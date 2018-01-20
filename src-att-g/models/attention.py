@@ -19,6 +19,7 @@ def multihead_attention(query_antecedent,
                         output_depth,
                         num_heads,
                         dropout_rate=0.0,
+                        reuse=None,
                         name=None):
   """Multihead scaled-dot-product attention with input/output transformations.
 
@@ -56,7 +57,7 @@ def multihead_attention(query_antecedent,
       default_name="multihead_attention",
       values=[query_antecedent, memory_antecedent]):
     q, k, v = compute_qkv(query_antecedent, memory_antecedent, total_key_depth,
-                          total_value_depth)
+                          total_value_depth, reuse=reuse)
 
     q = split_heads(q, num_heads)
     k = split_heads(k, num_heads)
@@ -68,14 +69,15 @@ def multihead_attention(query_antecedent,
 
     x = combine_heads(x)
     x = tf.layers.dense(
-        x, output_depth, use_bias=False, name="output_transform")
+        x, output_depth, use_bias=False, name="output_transform", reuse=reuse)
     return x
 
 
 def compute_qkv(query_antecedent,
                 memory_antecedent,
                 total_key_depth,
-                total_value_depth):
+                total_value_depth,
+                reuse=None):
   """Computes query, key and value.
 
   Args:
@@ -89,9 +91,9 @@ def compute_qkv(query_antecedent,
   if memory_antecedent is None:
     memory_antecedent = query_antecedent
   
-  q = tf.layers.dense(query_antecedent, total_key_depth, use_bias=False, name="q")
-  k = tf.layers.dense(memory_antecedent, total_key_depth, use_bias=False, name="k")
-  v = tf.layers.dense(memory_antecedent, total_value_depth, use_bias=False, name="v")
+  q = tf.layers.dense(query_antecedent, total_key_depth, use_bias=False, name="q", reuse=reuse)
+  k = tf.layers.dense(memory_antecedent, total_key_depth, use_bias=False, name="k", reuse=reuse)
+  v = tf.layers.dense(memory_antecedent, total_value_depth, use_bias=False, name="v", reuse=reuse)
   return q, k, v
 
 def dot_product_attention(q,
