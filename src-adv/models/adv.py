@@ -1,20 +1,20 @@
 import tensorflow as tf
 
 
-# def scale_l2(x, eps=1e-3):
-#   # shape(x) = (batch, num_timesteps, d)
-#   # Divide x by max(abs(x)) for a numerically stable L2 norm.
-#   # 2norm(x) = a * 2norm(x/a)
-#   # Scale over the full sequence, dims (1, 2)
-#   alpha = tf.reduce_max(tf.abs(x), (1, 2), keep_dims=True) + 1e-12
-#   l2_norm = alpha * tf.sqrt(
-#       tf.reduce_sum(tf.pow(x / alpha, 2), (1, 2), keep_dims=True) + 1e-6)
-#   x_unit = x / l2_norm
-#   return eps * x_unit
-
 def scale_l2(x, eps=1e-3):
-    # scale over the full batch
-    return eps * tf.nn.l2_normalize(x, dim=[0, 1, 2])
+  # shape(x) = (batch, num_timesteps, d)
+  # Divide x by max(abs(x)) for a numerically stable L2 norm.
+  # 2norm(x) = a * 2norm(x/a)
+  # Scale over the full sequence, dims (1, 2)
+  alpha = tf.reduce_max(tf.abs(x), (1, 2), keep_dims=True) + 1e-12
+  l2_norm = alpha * tf.sqrt(
+      tf.reduce_sum(tf.pow(x / alpha, 2), (1, 2), keep_dims=True) + 1e-6)
+  x_unit = x / l2_norm
+  return eps * x_unit
+
+# def scale_l2(x, eps=1e-3):
+#     # scale over the full batch
+#     return eps * tf.nn.l2_normalize(x, dim=[0, 1, 2])
 
 def mask_by_length(t, length):
   """Mask t, 3-D [batch, time, dim], by length, 1-D [batch,]."""
@@ -58,12 +58,14 @@ def kl_divergence_with_logits(q_logit, p_logit):
     kl = qlogq - qlogp
     return kl
 
-def virtual_adversarial_loss(logits, length, sentence, pos1, pos2, logits_fn,
-                             lexical=None, num_iter=1, small_coef=1e-6):
+def virtual_adversarial_loss(logits, inp_dict, logits_fn,
+                             num_iter=1, small_coef=1e-6):
     # Stop gradient of logits. See https://arxiv.org/abs/1507.00677 for details.
     logits = tf.stop_gradient(logits)
-
+    
     # Initialize perturbation with random noise.
+    sentence = inp_dict['sentence']
+    length = inp_dict['length']
     d_sent = tf.random_normal(shape=tf.shape(sentence))
 
     # Perform finite difference method and power iteration.
@@ -73,14 +75,14 @@ def virtual_adversarial_loss(logits, length, sentence, pos1, pos2, logits_fn,
     agg_method = tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N
     for _ in range(num_iter):
       d_sent = scale_l2(mask_by_length(d_sent, length), small_coef) 
-      vadv_sent = sentence + d_sent
-      d_logits = logits_fn(vadv_sent, pos1, pos2)
+      inp_dict['sentence'] = sentence + d_sent
+      d_logits = logits_fn(inp_dict)
 
       kl = kl_divergence_with_logits(logits, d_logits)
       d_sent, = tf.gradients(kl, d_sent, aggregation_method=agg_method)
       d_sent = tf.stop_gradient(d_sent)
 
-    vadv_sent = sentence + scale_l2(d_sent)
-    vadv_logits = logits_fn(vadv_sent, pos1, pos2)
+    inp_dict['sentence'] = sentence + scale_l2(d_sent)
+    vadv_logits = logits_fn(inp_dict)
 
     return kl_divergence_with_logits(logits, vadv_logits)

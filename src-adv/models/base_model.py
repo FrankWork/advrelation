@@ -59,3 +59,59 @@ def optimize(loss, lrn_rate, max_norm=None, decay_steps=None):
       gradients, _ = tf.clip_by_global_norm(gradients, max_norm)
     train_op = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
     return train_op
+
+    
+def slice_batch(inputs, begin, size, dtype=tf.float32):
+  '''
+  Args
+    inputs: [batch, length, dim]
+    begin: [batch]
+    size: [batch]
+  '''
+  max_size = tf.reduce_max(size)
+  batch_idx = tf.range(tf.shape(inputs)[0])
+
+  # [batch, 1]
+  begin = tf.expand_dims(begin, axis=-1)
+  size = tf.expand_dims(size, axis=-1)
+
+  # [batch, 2]
+  begin = tf.concat([begin, tf.zeros_like(begin)], axis=-1)
+  size = tf.concat([size, -1*tf.ones_like(size)], axis=-1)
+
+  def map_fn(idx):
+    slice = tf.slice(inputs[idx], begin[idx], size[idx])
+    pad = tf.pad(slice, [[0, max_size-size[idx][0]], [0, 0]])
+    return pad
+
+  return tf.map_fn(map_fn, batch_idx, dtype=dtype)
+
+def slice_batch_n(inputs, begin_n, size_n, dtype=tf.float32):
+  '''
+  Args
+    inputs: [batch, length, dim]
+    begin_n: a list of tensors of shape [batch]
+    size_n: a list of tensors of shape [batch]
+  '''
+  size_total = tf.add_n(size_n)
+  max_size = tf.reduce_max(size_total)
+  batch_idx = tf.range(tf.shape(inputs)[0])
+
+  # [batch, 1]
+  begin_n = [tf.expand_dims(begin, axis=-1) for begin in begin_n]
+  size_n = [tf.expand_dims(size, axis=-1) for size in size_n]
+
+  # [batch, 2]
+  begin_n = [tf.concat([begin, tf.zeros_like(begin)], axis=-1) for begin in begin_n]
+  size_n = [tf.concat([size, -1*tf.ones_like(size)], axis=-1) for size in size_n]
+
+  def map_fn(idx):
+    slice_n = []
+    for begin, size in zip(begin_n, size_n):
+      slice = tf.slice(inputs[idx], begin[idx], size[idx])
+      slice_n.append(slice)
+    slice_n = tf.concat(slice_n, axis=0)
+    pad = tf.pad(slice_n, [[0, max_size-size_total[idx]], [0, 0]])
+    return pad
+
+  return tf.map_fn(map_fn, batch_idx, dtype=dtype)

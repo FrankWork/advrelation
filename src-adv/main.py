@@ -31,14 +31,14 @@ def train_semeval(sess, m_train, m_valid, test_iter):
 
   # unsup train
   # for epoch in range(2):
-  for batch in range(1001):
-    train_op = m_train.train_ops['train_unsup_loss']
-    _, loss = sess.run([train_op, m_train.tensors['unsup_loss']])
+  # for batch in range(1001):
+  #   train_op = m_train.train_ops['train_unsup_loss']
+  #   _, loss = sess.run([train_op, m_train.tensors['unsup_loss']])
   
-  now = time.time()
-  duration = now - start_time
-  start_time = now
-  print('loss %.4f time %.2f' % (loss, duration))
+  # now = time.time()
+  # duration = now - start_time
+  # start_time = now
+  # print('loss %.4f time %.2f' % (loss, duration))
   
   for epoch in range(FLAGS.num_epochs):
     sess.run([test_iter.initializer])

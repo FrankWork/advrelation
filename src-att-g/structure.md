@@ -4,8 +4,10 @@
   acc: 79.53, 79.91
 - pool ent, pool max
   acc 80.49  f1 **84.28**
-  acc 80.06
-  acc 80.99
+  acc 80.06, 80.99, 
+  acc 79.70, 80.20
+  acc 80.59 80.06
+
 - pool ent, pool max, pool att
   acc 79.59
 - pool ent, self attention inputs cnn max pool
@@ -16,5 +18,8 @@
   acc 80.16
 - pool ent, pool max, attentive pooling 
   acc 0.7944
+- pool ent, pool att
+  acc 80.05
+
 
 

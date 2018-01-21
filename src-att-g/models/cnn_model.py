@@ -48,49 +48,6 @@ class CNNModel(BaseModel):
     # with tf.variable_scope('semeval_graph'):
     self.build_semeval_graph(semeval_data)
 
-  def body_v0(self, data):
-    (label, length, ent_pos, sentence, pos1, pos2) = data
-
-    # sentence and pos from embedding
-    sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
-
-    pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
-    pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
-
-    # conv
-    sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
-    inputs = tf.concat([sentence, pos1, pos2], axis=2)
-    # self.cache.append(inputs)
-
-    entities = self.slice_entity(inputs, ent_pos, length)
-    scaled_entities = multihead_attention(entities, inputs, None, self.embed_dim, 
-                                  self.embed_dim, self.embed_dim, 10, 
-                                  name='ent-mh-att')
-    conv_ent = conv_block_v2(scaled_entities, KERNEL_SIZE, NUM_FILTERS,
-                            'conv_block1',training=self.is_train, 
-                             initializer=self.he_normal, reuse=tf.AUTO_REUSE)
-    pool_ent = tf.layers.max_pooling1d(conv_ent, MAX_LEN, MAX_LEN, padding='same')
-    pool_ent = tf.squeeze(pool_ent, axis=1)
-
-    conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
-                            'conv_block2',training=self.is_train, 
-                             initializer=self.he_normal, reuse=tf.AUTO_REUSE)
-    # pool_out = tf.layers.max_pooling1d(conv_out, MAX_LEN, MAX_LEN, padding='same')
-    # pool_out = tf.squeeze(pool_out, axis=1)
-    pool_max = tf.reduce_max(conv_out, axis=1)
-    # self.cache.append(conv_out)
-
-    # ent1, ent2, context = self.slice_ent_and_context(conv_out, ent_pos, length)
-    # pool_att = self.entity_attention(context, ent1, ent2)
-
-    # pool_att = self.entity_attention_v2(conv_out, pool_ent)
-
-    pool_out = tf.concat([pool_ent, pool_max], axis=1)
-    # pool_out = pool_out1
-
-    body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
-    return label, body_out
-
   def body(self, data):
     (label, length, ent_pos, sentence, pos1, pos2) = data
 
@@ -107,28 +64,45 @@ class CNNModel(BaseModel):
 
     entities = self.slice_entity(inputs, ent_pos, length)
     scaled_entities = multihead_attention(entities, inputs, None, self.embed_dim, 
-                                  self.embed_dim, self.embed_dim, 10, 
+                                  self.embed_dim, self.embed_dim, 10, reuse=tf.AUTO_REUSE,
                                   name='ent-mh-att')
-    conv_ent = conv_block_v2(scaled_entities, KERNEL_SIZE, NUM_FILTERS,
+    conv_ent = tf.nn.relu(scaled_entities)
+    pool_ent = tf.reduce_max(conv_ent, axis=1)
+
+    conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
                             'conv_block1',training=self.is_train, 
-                             initializer=self.he_normal, reuse=tf.AUTO_REUSE)
-    pool_ent = tf.layers.max_pooling1d(conv_ent, MAX_LEN, MAX_LEN, padding='same')
-    # pool_ent = tf.squeeze(pool_ent, axis=1)
-
-    inp_len = tf.shape(inputs)[1]
-    ent_tile = tf.tile(pool_ent, [1, inp_len, 1])
-    inputs = tf.concat([inputs, ent_tile], axis=2)
-
-    conv_out = conv_block_v2(inputs, KERNEL_SIZE, 2*NUM_FILTERS,
-                            'conv_block2', training=self.is_train, 
                              initializer=self.he_normal, reuse=tf.AUTO_REUSE)
     pool_max = tf.reduce_max(conv_out, axis=1)
     # self.cache.append(conv_out)
-    # pool_out = tf.concat([pool_ent, pool_max], axis=1)
-    pool_out = pool_max
+    # pool_max = self.conv_deep(inputs)
+
+    pool_out = tf.concat([pool_ent, pool_max], axis=1)
+    # pool_out = pool_out1
 
     body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
     return label, body_out
+
+  def relation_att(self, x):
+    rel_dim = 25
+    V = tf.get_variable('rel_embed', [NUM_CLASSES, rel_dim])
+    A = tf.get_variable('A', [2*self.embed_dim, rel_dim])
+    B = tf.get_variable('B', [rel_dim, rel_dim])
+
+    z = tf.matmul(x, A)
+    z = tf.matmul(z, V, transpose_b=True)
+    Z = tf.nn.softmax(z)
+    r = tf.expand_dims(Z, axis=-1) * tf.expand_dims(V, axis=0) # (b, 19, d)
+    R = tf.reshape(r, [-1, NUM_CLASSES*rel_dim]) # (b*19, d)
+
+    r = tf.reshape(r, [-1, rel_dim]) # (b*19, d)
+    h = tf.matmul(r, B)
+    h = tf.matmul(h, r, transpose_b=True)
+    H = tf.nn.softmax(tf.reshape(h, [-1, NUM_CLASSES]))
+
+    R = tf.matmul(tf.reshape(H, [tf.shape(r)[0], -1]), r)
+    R = tf.reshape(R, [-1, NUM_CLASSES*rel_dim])
+
+    return R
 
   def slice_entity(self, inputs, ent_pos, length):
     '''

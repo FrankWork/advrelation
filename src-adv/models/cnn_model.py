@@ -3,22 +3,23 @@ from models.base_model import *
 from models.adv import *
 from models.focal_loss import *
 from models.residual import residual_net
+from models.attention import *
 
 flags = tf.app.flags
 
 flags.DEFINE_integer("pos_num", 123, "number of position feature")
 flags.DEFINE_integer("pos_dim", 5, "position embedding size")
 flags.DEFINE_integer("num_hops", 1, "hop numbers of entity attention")
-flags.DEFINE_float("l2_coef", 0.001, "l2 loss coefficient")
+flags.DEFINE_float("l2_coef", 0.01, "l2 loss coefficient")
 flags.DEFINE_float("dropout_rate", 0.5, "dropout probability")
 flags.DEFINE_float("lrn_rate", 0.001, "learning rate")
 
 FLAGS = flags.FLAGS
 
-MAX_LEN = 98
+MAX_LEN = 97
 NUM_CLASSES = 19
 KERNEL_SIZE = 3
-NUM_FILTERS = 320
+NUM_FILTERS = 310
 
 class CNNModel(BaseModel):
 
@@ -39,22 +40,26 @@ class CNNModel(BaseModel):
     pos_shape = [FLAGS.pos_num, FLAGS.pos_dim]  
     self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
     self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
+    self.embed_dim = self.word_dim + 2*FLAGS.pos_dim
 
     self.tensors = dict()
 
     with tf.variable_scope('adv_graph'):
       self.build_semeval_graph(semeval_data)
-      self.build_nyt_graph(unsup_data)
+      # self.build_nyt_graph(unsup_data)
 
   def bottom(self, data):
-    labels, length, sentence, pos1, pos2 = data
+    (labels, length, ent_pos, sentence, pos1, pos2) = data
 
     # embedding lookup
     sentence = tf.nn.embedding_lookup(self.word_embed, sentence)
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
-    return labels, length, sentence, pos1, pos2
+    sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
+
+    return labels, {'length': length, 'ent_pos': ent_pos, 
+            'sentence': sentence, 'pos1': pos1, 'pos2': pos2}
   
   def conv_shallow(self, inputs):
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
@@ -70,16 +75,50 @@ class CNNModel(BaseModel):
     # FIXME auto reuse
     return residual_net(inputs, MAX_LEN, NUM_FILTERS, self.is_train, NUM_CLASSES)
 
-  def compute_logits(self, sentence, pos1, pos2, lexical=None, regularizer=None):
-    sent_pos = tf.concat([sentence, pos1, pos2], axis=2)
-    conv_out = self.conv_shallow(sent_pos)
-    # conv_out = self.conv_deep(sent_pos)
+  def compute_logits(self, inp_dict, regularizer=None):
+    sentence = inp_dict['sentence']
+    pos1 = inp_dict['pos1']
+    pos2 = inp_dict['pos1']
+    inputs = tf.concat([sentence, pos1, pos2], axis=2)
 
-    conv_out = tf.layers.dropout(conv_out, FLAGS.dropout_rate, training=self.is_train)
+    ent_pos = inp_dict['ent_pos']
+    length = inp_dict['length']
+    entities = self.slice_entity(inputs, ent_pos, length)
+    scaled_entities = multihead_attention(entities, inputs, None, self.embed_dim, 
+                                  self.embed_dim, self.embed_dim, 10, reuse=tf.AUTO_REUSE,
+                                  name='ent-mh-att')
+    ent_out = tf.nn.relu(scaled_entities)
+    ent_out = tf.reduce_max(ent_out, axis=1)
 
-    logits = tf.layers.dense(conv_out, NUM_CLASSES, name='out_dense',
+    conv_out = self.conv_shallow(inputs)
+
+    out = tf.concat([ent_out, conv_out], axis=1)
+    out = tf.layers.dropout(out, FLAGS.dropout_rate, training=self.is_train)
+    logits = tf.layers.dense(out, NUM_CLASSES, name='out_dense',
                         kernel_regularizer=regularizer, reuse=tf.AUTO_REUSE)
     return logits
+  
+  def slice_entity(self, inputs, ent_pos, length):
+    '''
+    Args
+      conv_out: [batch, max_len, filters]
+      ent_pos:  [batch, 4]
+      length:   [batch]
+    '''
+    # slice ent1
+    # -------(e1.first--e1.last)-------e2.first--e2.last-------
+    begin1 = ent_pos[:, 0]
+    size1 = ent_pos[:, 1] - ent_pos[:, 0] + 1
+
+    # slice ent2
+    # -------e1.first--e1.last-------(e2.first--e2.last)-------
+    begin2 = ent_pos[:, 2]
+    size2 = ent_pos[:, 3] - ent_pos[:, 2] + 1
+    
+    entities = slice_batch_n(inputs, [begin1, begin2], [size1, size2])
+    entities.set_shape(tf.TensorShape([None, None, self.embed_dim]))
+
+    return entities
 
   def compute_xentropy_loss(self, logits, labels):
     # Calculate Mean cross-entropy loss
@@ -92,20 +131,22 @@ class CNNModel(BaseModel):
     return cross_entropy
   
   def build_semeval_graph(self, data):
-    labels, length, sentence, pos1, pos2 = self.bottom(data)
-    sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
+    labels, inp_dict = self.bottom(data)
 
     # cross entropy loss
-    logits = self.compute_logits(sentence, pos1, pos2, regularizer=self.regularizer)
+    logits = self.compute_logits(inp_dict, regularizer=self.regularizer)
     loss_xent = self.compute_xentropy_loss(logits, labels)
 
     # adv loss
+    sentence = inp_dict['sentence']
     adv_sentence = adv_example(sentence, loss_xent)
-    adv_logits = self.compute_logits(adv_sentence, pos1, pos2)
+    inp_dict['sentence'] = adv_sentence
+    adv_logits = self.compute_logits(inp_dict)
     loss_adv = self.compute_xentropy_loss(adv_logits, labels)
 
     # vadv loss
-    loss_vadv = virtual_adversarial_loss(logits, length, sentence, pos1, pos2, self.compute_logits)
+    inp_dict['sentence'] = sentence
+    loss_vadv = virtual_adversarial_loss(logits, inp_dict, self.compute_logits)
 
     # l2 loss
     regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -122,7 +163,7 @@ class CNNModel(BaseModel):
       acc = tf.reduce_mean(acc)
 
     self.tensors['acc'] = acc
-    self.tensors['loss'] = loss_xent + loss_adv + loss_vadv + loss_l2
+    self.tensors['loss'] = loss_xent + loss_l2 # + loss_adv + loss_vadv
     self.tensors['pred'] = pred
 
   def build_nyt_graph(self, data):
@@ -146,8 +187,8 @@ class CNNModel(BaseModel):
       self.train_ops = dict()
       loss = self.tensors['loss']
       self.train_ops['train_loss'] = optimize(loss, FLAGS.lrn_rate, decay_steps=None)
-      unsup_loss = self.tensors['unsup_loss']
-      self.train_ops['train_unsup_loss'] = optimize(unsup_loss, 0.1*FLAGS.lrn_rate, decay_steps=None)
+      # unsup_loss = self.tensors['unsup_loss']
+      # self.train_ops['train_unsup_loss'] = optimize(unsup_loss, 0.1*FLAGS.lrn_rate, decay_steps=None)
 
 def build_train_valid_model(model_name, word_embed, 
                             train_data, test_data, unsup_data,

@@ -53,13 +53,14 @@ class SemEvalCleanedTextData(dataset.TextDataset):
 
         e1_first, e1_last  = (int(words[1]), int(words[2]))
         e2_first, e2_last  = (int(words[3]), int(words[4]))
+        ent_pos = [e1_first, e1_last, e2_first, e2_last]
 
         pos1 = dataset.position_feature(e1_first, e1_last, length)
         pos2 = dataset.position_feature(e2_first, e2_last, length)
 
         yield {
-          'label': [label], 'length': [length], 'sentence': sent, 
-          'pos1': pos1, 'pos2': pos2}
+          'label': [label], 'length': [length], 'ent_pos': ent_pos, 
+          'sentence': sent, 'pos1': pos1, 'pos2': pos2}
     
 class SemEvalCleanedRecordData(dataset.RecordDataset):
 
@@ -72,21 +73,31 @@ class SemEvalCleanedRecordData(dataset.RecordDataset):
     features = {
         "label": tf.FixedLenFeature([], tf.int64),
         "length": tf.FixedLenFeature([], tf.int64),
+        "ent_pos": tf.FixedLenFeature([4], tf.int64),
         "sentence": tf.VarLenFeature(tf.int64),
         "pos1": tf.VarLenFeature(tf.int64),
         "pos2": tf.VarLenFeature(tf.int64),
     }
     feat_dict = tf.parse_single_example(example, features)
+
+    # load from disk
     label = feat_dict['label']
-    length = feat_dict['length']
+    length = tf.cast(feat_dict['length'], tf.int32)
+    ent_pos = tf.cast(feat_dict['ent_pos'], tf.int32)
     sentence = tf.sparse_tensor_to_dense(feat_dict['sentence'])
     pos1 = tf.sparse_tensor_to_dense(feat_dict['pos1'])
     pos2 = tf.sparse_tensor_to_dense(feat_dict['pos2'])
-    return label, length, sentence, pos1, pos2
 
+    # transformed tensor
+    # begin = tf.convert_to_tensor([ent_pos[0], ent_pos[2]])
+    # size = tf.convert_to_tensor([ent_pos[1]-ent_pos[0]+1, ent_pos[3]-ent_pos[2]+1])
+
+    return (label, length, ent_pos, 
+            sentence, pos1, pos2)
   
   def padded_shapes(self):
-    return ([], [], [None], [None], [None])
+    return ([], [], [4],
+            [None], [None], [None])
 
 
 def write_results(predictions):
