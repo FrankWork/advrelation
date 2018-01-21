@@ -114,12 +114,13 @@ def main(_):
   with tf.Graph().as_default():
     train_iter = semeval_record.train_data(FLAGS.num_epochs, FLAGS.batch_size)
     test_iter = semeval_record.test_data(1, FLAGS.batch_size)
-    unsup_iter = nyt_record.unsup_data(FLAGS.num_epochs, FLAGS.batch_size)
+    # unsup_iter = nyt_record.unsup_data(FLAGS.num_epochs, FLAGS.batch_size)
                                           
     model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
     train_data = train_iter.get_next()
     test_data = test_iter.get_next()
-    unsup_data = unsup_iter.get_next()
+    # unsup_data = unsup_iter.get_next()
+    unsup_data = None
     m_train, m_valid = cnn_model.build_train_valid_model(
                           model_name, word_embed,
                           train_data, test_data, unsup_data,

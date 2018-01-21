@@ -61,9 +61,9 @@ class CNNModel(BaseModel):
     return labels, {'length': length, 'ent_pos': ent_pos, 
             'sentence': sentence, 'pos1': pos1, 'pos2': pos2}
   
-  def conv_shallow(self, inputs):
+  def conv_shallow(self, inputs, name='conv_block'):
     conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
-                            'conv_block1',training=self.is_train, 
+                            name,training=self.is_train, 
                           initializer=self.he_normal, batch_norm=False,
                           reuse=tf.AUTO_REUSE)
 
@@ -89,10 +89,13 @@ class CNNModel(BaseModel):
                                   name='ent-mh-att')
     ent_out = tf.nn.relu(scaled_entities)
     ent_out = tf.reduce_max(ent_out, axis=1)
+    # ent_out = self.conv_shallow(scaled_entities, 'conv_ent')
 
     conv_out = self.conv_shallow(inputs)
+    # conv_out = self.conv_deep(inputs)
 
     out = tf.concat([ent_out, conv_out], axis=1)
+    # out = conv_out
     out = tf.layers.dropout(out, FLAGS.dropout_rate, training=self.is_train)
     logits = tf.layers.dense(out, NUM_CLASSES, name='out_dense',
                         kernel_regularizer=regularizer, reuse=tf.AUTO_REUSE)
@@ -124,11 +127,11 @@ class CNNModel(BaseModel):
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
       one_hot = tf.one_hot(labels, NUM_CLASSES)
-      cross_entropy = tf.losses.softmax_cross_entropy(logits=logits, 
-                           onehot_labels=one_hot)
+      cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits,
+                                  labels=one_hot)
       # cross_entropy = tf.reduce_mean(focal_loss(one_hot, logits))
 
-    return cross_entropy
+    return tf.reduce_mean(cross_entropy)
   
   def build_semeval_graph(self, data):
     labels, inp_dict = self.bottom(data)
@@ -137,16 +140,16 @@ class CNNModel(BaseModel):
     logits = self.compute_logits(inp_dict, regularizer=self.regularizer)
     loss_xent = self.compute_xentropy_loss(logits, labels)
 
-    # adv loss
-    sentence = inp_dict['sentence']
-    adv_sentence = adv_example(sentence, loss_xent)
-    inp_dict['sentence'] = adv_sentence
-    adv_logits = self.compute_logits(inp_dict)
-    loss_adv = self.compute_xentropy_loss(adv_logits, labels)
+    # # adv loss
+    # sentence = inp_dict['sentence']
+    # adv_sentence = adv_example(sentence, loss_xent)
+    # inp_dict['sentence'] = adv_sentence
+    # adv_logits = self.compute_logits(inp_dict)
+    # loss_adv = self.compute_xentropy_loss(adv_logits, labels)
 
-    # vadv loss
-    inp_dict['sentence'] = sentence
-    loss_vadv = virtual_adversarial_loss(logits, inp_dict, self.compute_logits)
+    # # vadv loss
+    # inp_dict['sentence'] = sentence
+    # loss_vadv = virtual_adversarial_loss(logits, inp_dict, self.compute_logits)
 
     # l2 loss
     regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -163,7 +166,7 @@ class CNNModel(BaseModel):
       acc = tf.reduce_mean(acc)
 
     self.tensors['acc'] = acc
-    self.tensors['loss'] = loss_xent + loss_l2 # + loss_adv + loss_vadv
+    self.tensors['loss'] = loss_xent + loss_l2  #+ loss_adv #+ loss_vadv
     self.tensors['pred'] = pred
 
   def build_nyt_graph(self, data):
