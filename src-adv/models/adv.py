@@ -12,7 +12,7 @@ import tensorflow as tf
 #   x_unit = x / l2_norm
 #   return eps * x_unit
 
-def scale_l2(x, eps=1e-3):
+def scale_l2(x, eps=1e-1):
     # scale over the full batch
     return eps * tf.nn.l2_normalize(x, dim=[0, 1, 2])
 
@@ -58,14 +58,12 @@ def kl_divergence_with_logits(q_logit, p_logit):
     kl = qlogq - qlogp
     return kl
 
-def virtual_adversarial_loss(logits, inp_dict, logits_fn,
+def virtual_adversarial_loss(logits, sentence, length, ent_pos, pos1, pos2, logits_fn,
                              num_iter=1, small_coef=1e-6):
     # Stop gradient of logits. See https://arxiv.org/abs/1507.00677 for details.
     logits = tf.stop_gradient(logits)
     
     # Initialize perturbation with random noise.
-    sentence = inp_dict['sentence']
-    length = inp_dict['length']
     d_sent = tf.random_normal(shape=tf.shape(sentence))
 
     # Perform finite difference method and power iteration.
@@ -75,14 +73,14 @@ def virtual_adversarial_loss(logits, inp_dict, logits_fn,
     agg_method = tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N
     for _ in range(num_iter):
       d_sent = scale_l2(mask_by_length(d_sent, length), small_coef) 
-      inp_dict['sentence'] = sentence + d_sent
-      d_logits = logits_fn(inp_dict)
+      vadv_sent = sentence + d_sent
+      d_logits = logits_fn(vadv_sent, length, ent_pos, pos1, pos2)
 
       kl = kl_divergence_with_logits(logits, d_logits)
       d_sent, = tf.gradients(kl, d_sent, aggregation_method=agg_method)
       d_sent = tf.stop_gradient(d_sent)
 
-    inp_dict['sentence'] = sentence + scale_l2(d_sent)
-    vadv_logits = logits_fn(inp_dict)
+    vadv_sent = sentence + scale_l2(d_sent)
+    vadv_logits = logits_fn(vadv_sent, length, ent_pos, pos1, pos2)
 
     return kl_divergence_with_logits(logits, vadv_logits)
