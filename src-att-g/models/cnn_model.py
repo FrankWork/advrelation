@@ -57,11 +57,11 @@ class CNNModel(BaseModel):
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
-    # conv
+    # inputs
     sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
     inputs = tf.concat([sentence, pos1, pos2], axis=2)
-    # self.cache.append(inputs)
 
+    # # entitiy attention
     entities = self.slice_entity(inputs, ent_pos, length)
     scaled_entities = multihead_attention(entities, inputs, None, self.embed_dim, 
                                   self.embed_dim, self.embed_dim, 10, reuse=tf.AUTO_REUSE,
@@ -69,15 +69,9 @@ class CNNModel(BaseModel):
     conv_ent = tf.nn.relu(scaled_entities)
     pool_ent = tf.reduce_max(conv_ent, axis=1)
 
-    conv_out = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
-                            'conv_block1',training=self.is_train, 
-                             initializer=self.he_normal, reuse=tf.AUTO_REUSE)
-    pool_max = tf.reduce_max(conv_out, axis=1)
-    # self.cache.append(conv_out)
-    # pool_max = self.conv_deep(inputs)
-
-    pool_out = tf.concat([pool_ent, pool_max], axis=1)
-    # pool_out = pool_out1
+    # conv inputs
+    pool_max = self.conv_shallow(inputs)
+    pool_out = tf.concat([pool_ent, pool_max])
 
     body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
     return label, body_out
@@ -174,7 +168,25 @@ class CNNModel(BaseModel):
     return pool_out
 
   def conv_deep(self, inputs):
-    return residual_net(inputs, MAX_LEN, NUM_FILTERS, self.is_train)
+    # return residual_net(inputs, MAX_LEN, NUM_FILTERS, self.is_train)
+    x = inputs
+
+    x = tf.layers.conv1d(x, NUM_FILTERS, KERNEL_SIZE,
+                  strides=1, padding='same', activation=tf.nn.relu,
+                  kernel_initializer=self.he_normal, name='conv-1')
+    x = tf.layers.max_pooling1d(x, KERNEL_SIZE, 2, padding='valid')
+
+    x = tf.layers.conv1d(x, NUM_FILTERS, KERNEL_SIZE,
+                  strides=1, padding='same', activation=tf.nn.relu,
+                  kernel_initializer=self.he_normal, name='conv-2')
+    x = tf.layers.max_pooling1d(x, KERNEL_SIZE, 2, padding='valid')
+
+    x = tf.layers.conv1d(x, NUM_FILTERS, KERNEL_SIZE,
+                  strides=1, padding='same', activation=tf.nn.relu,
+                  kernel_initializer=self.he_normal, name='conv-final')
+
+    return tf.reduce_max(x, axis=1)
+
 
   def entity_attention(self, context, ent1, ent2, num_hops=1):
     def tanh_att(ent, context, name, keepdims=True):

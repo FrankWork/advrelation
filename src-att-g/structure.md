@@ -22,4 +22,9 @@
   acc 80.05
 
 
+# deep conv
 
+- cnn + max pooling
+  acc 79.38
+- 2cnn + max pooling
+  acc 79.24
