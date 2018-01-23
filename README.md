@@ -7,7 +7,7 @@
 - attention context
 - adversarial
 - residual
-- Subword token
+- Subword token | char level
 
 ## src
 

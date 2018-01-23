@@ -140,7 +140,7 @@ class CNNModel(BaseModel):
     loss_adv = self.compute_xentropy_loss(adv_logits, labels)
 
     # # vadv loss
-    loss_vadv = virtual_adversarial_loss(logits, sentence, length, ent_pos, pos1, pos2, self.compute_logits)
+    # loss_vadv = virtual_adversarial_loss(logits, sentence, length, ent_pos, pos1, pos2, self.compute_logits)
 
     # l2 loss
     regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -157,7 +157,7 @@ class CNNModel(BaseModel):
       acc = tf.reduce_mean(acc)
 
     self.tensors['acc'] = acc
-    self.tensors['loss'] = loss_xent + loss_adv + loss_l2 + loss_vadv
+    self.tensors['loss'] = loss_xent + loss_adv + loss_l2 #+ loss_vadv
     self.tensors['pred'] = pred
 
   def build_nyt_graph(self, data):
