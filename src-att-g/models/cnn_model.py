@@ -69,9 +69,10 @@ class CNNModel(BaseModel):
     conv_ent = tf.nn.relu(scaled_entities)
     pool_ent = tf.reduce_max(conv_ent, axis=1)
 
-    # conv inputs
-    pool_max = self.conv_shallow(inputs)
-    pool_out = tf.concat([pool_ent, pool_max])
+    # conv layer
+    r = self.conv_att_v2(inputs)
+
+    pool_out = tf.concat([pool_ent, r], axis=1)
 
     body_out = tf.layers.dropout(pool_out, FLAGS.dropout_rate, training=self.is_train)
     return label, body_out
@@ -187,6 +188,31 @@ class CNNModel(BaseModel):
 
     return tf.reduce_max(x, axis=1)
 
+  def conv_att(self, inputs):
+    H = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
+                            'conv_block1',training=self.is_train, 
+                          initializer=self.he_normal, batch_norm=False)
+    # pool_max = tf.reduce_max(H, axis=1)
+    M = tf.nn.tanh(H) # b,n,d
+    w = tf.get_variable('w-att',[1, NUM_FILTERS], initializer=self.he_normal)
+    batch_size = tf.shape(H)[0]
+    alpha = tf.matmul(tf.tile(tf.expand_dims(w, 0), [batch_size, 1, 1]),
+                      M, transpose_b=True)
+    alpha = tf.nn.softmax(alpha) # b,1,n
+    r = tf.matmul(alpha, H) # b, 1, d
+    return tf.squeeze(r, axis=1)
+
+  def conv_att_v2(self, inputs):
+    x = conv_block_v2(inputs, KERNEL_SIZE, NUM_FILTERS,
+                            'conv_block1',training=self.is_train, 
+                          initializer=self.he_normal, batch_norm=False)
+    # pool_max = tf.reduce_max(H, axis=1)
+    x = multihead_attention(x, inputs, None, NUM_FILTERS, 
+                                  NUM_FILTERS, NUM_FILTERS, 10, reuse=tf.AUTO_REUSE,
+                                  name='conv-mh-att')
+    x = tf.nn.relu(x)
+    x = tf.reduce_max(x, axis=1)
+    return x
 
   def entity_attention(self, context, ent1, ent2, num_hops=1):
     def tanh_att(ent, context, name, keepdims=True):

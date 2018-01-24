@@ -20,7 +20,10 @@
   acc 0.7944
 - pool ent, pool att
   acc 80.05
-
+- pool ent, conv att
+  acc 80.27
+- pool ent, conv att v2
+  acc 80.06
 
 # deep conv
 
