@@ -1,0 +1,3 @@
+- brcnn: 79.90
+- brcnn + adv: 1e-1 79.24
+- brcnn + adv: 1e-3 79.49

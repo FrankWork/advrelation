@@ -5,7 +5,7 @@ pos_embd_dir = 'checkpoint/pos_embd'
 dep_embd_dir = 'checkpoint/dep_embd'
 model_dir = 'checkpoint/modelv1'
 
-num_epochs = 50
+num_epochs = 100
 word_embd_dim = 300
 pos_embd_dim = 25
 dep_embd_dim = 75

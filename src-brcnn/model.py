@@ -251,101 +251,128 @@ with tf.name_scope("dropout"):
     embedded_word_drop = tf.nn.dropout(embedded_word, keep_prob)
     embedded_dep_drop = tf.nn.dropout(embedded_dep, keep_prob)
 
-word_hidden_state = tf.zeros([batch_size, word_state_size], name='word_hidden_state')
-word_cell_state = tf.zeros([batch_size, word_state_size], name='word_cell_state')
-word_init_state = tf.contrib.rnn.LSTMStateTuple(word_hidden_state, word_cell_state)
+# word_hidden_state = tf.zeros([batch_size, word_state_size], name='word_hidden_state')
+# word_cell_state = tf.zeros([batch_size, word_state_size], name='word_cell_state')
+# word_init_state = tf.contrib.rnn.LSTMStateTuple(word_hidden_state, word_cell_state)
 
-with tf.variable_scope("word_lstm1"):
-    cell = tf.contrib.rnn.BasicLSTMCell(word_state_size)
-    cell = tf.contrib.rnn.DropoutWrapper(cell=cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
-    state_series_word1, _ = tf.nn.dynamic_rnn(cell, embedded_word_drop, sequence_length=path_length, initial_state=None, dtype=tf.float32)
+he_normal = tf.keras.initializers.he_normal()
 
+def compute_logits(embedded_word_drop, 
+                   embedded_dep_drop,
+                   reuse=None):
+    with tf.variable_scope("word_lstm1", reuse=reuse):
+        cell = tf.contrib.rnn.BasicLSTMCell(word_state_size)
+        cell = tf.contrib.rnn.DropoutWrapper(
+            cell=cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
+        state_series_word1, _ = tf.nn.dynamic_rnn(
+            cell, embedded_word_drop, sequence_length=path_length, 
+            initial_state=None, dtype=tf.float32)
 
-with tf.variable_scope("word_lstm2"):
-    cell = tf.contrib.rnn.BasicLSTMCell(word_state_size)
-    cell = tf.contrib.rnn.DropoutWrapper(cell=cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
-    state_series_word2, _ = tf.nn.dynamic_rnn(cell, tf.reverse(embedded_word_drop, axis=[1]), sequence_length=path_length, initial_state=None, dtype=tf.float32)
+    with tf.variable_scope("word_lstm2", reuse=reuse):
+        cell = tf.contrib.rnn.BasicLSTMCell(word_state_size)
+        cell = tf.contrib.rnn.DropoutWrapper(
+            cell=cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
+        state_series_word2, _ = tf.nn.dynamic_rnn(
+            cell, tf.reverse(embedded_word_drop, axis=[1]), 
+            sequence_length=path_length, initial_state=None, dtype=tf.float32)
 
-with tf.variable_scope("dep_lstm1"):
-    cell = tf.contrib.rnn.BasicLSTMCell(dep_state_size, state_is_tuple=True)
-    initial_state = cell.zero_state(batch_size, tf.float32)
-    cell = tf.contrib.rnn.DropoutWrapper(cell=cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
-    state_series_dep1, _ = tf.nn.dynamic_rnn(cell, embedded_dep_drop, sequence_length=path_length-1, initial_state=None, dtype=tf.float32)
+    with tf.variable_scope("dep_lstm1", reuse=reuse):
+        cell = tf.contrib.rnn.BasicLSTMCell(dep_state_size, state_is_tuple=True)
+        initial_state = cell.zero_state(batch_size, tf.float32)
+        cell = tf.contrib.rnn.DropoutWrapper(
+            cell=cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
+        state_series_dep1, _ = tf.nn.dynamic_rnn(
+            cell, embedded_dep_drop, sequence_length=path_length-1, 
+            initial_state=None, dtype=tf.float32)
 
-with tf.variable_scope("dep_lstm2"):
-    cell = tf.contrib.rnn.BasicLSTMCell(dep_state_size, state_is_tuple=True)
-    initial_state = cell.zero_state(batch_size, tf.float32)
-    cell = tf.contrib.rnn.DropoutWrapper(cell=cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
-    if directed:
-        embedded_dep_drop = embedded_dep_reverse_drop
-    state_series_dep2, _ = tf.nn.dynamic_rnn(cell, tf.reverse(embedded_dep_drop, axis=[1]), sequence_length=path_length-1, initial_state=None, dtype=tf.float32)
+    with tf.variable_scope("dep_lstm2", reuse=reuse):
+        cell = tf.contrib.rnn.BasicLSTMCell(dep_state_size, state_is_tuple=True)
+        initial_state = cell.zero_state(batch_size, tf.float32)
+        cell = tf.contrib.rnn.DropoutWrapper(
+            cell=cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
+        if directed:
+            embedded_dep_drop = embedded_dep_reverse_drop
+        state_series_dep2, _ = tf.nn.dynamic_rnn(
+            cell, tf.reverse(embedded_dep_drop, axis=[1]), 
+            sequence_length=path_length-1, initial_state=None, dtype=tf.float32)
 
-# state_series_dep1 = tf.concat([state_series_dep1, tf.zeros([batch_size, 1, dep_state_size])], 1)
-# state_series_dep2 = tf.concat([state_series_dep2, tf.zeros([batch_size, 1, dep_state_size])], 1)
+    state_series1 = tf.concat([state_series_word1, state_series_dep1], 2)
+    state_series2 = tf.concat([state_series_word2, state_series_dep2], 2)
 
-state_series1 = tf.concat([state_series_word1, state_series_dep1], 2)
-state_series2 = tf.concat([state_series_word2, state_series_dep2], 2)
+    state_series1 = tf.reshape(state_series1, 
+            [-1, max_len_path*int((win_size+1)/2), dep_state_size])
+    state_series2 = tf.reshape(state_series2, 
+            [-1, max_len_path*int((win_size+1)/2), dep_state_size])
 
-state_series1 = tf.reshape(state_series1, [-1, max_len_path*int((win_size+1)/2), dep_state_size])
-state_series2 = tf.reshape(state_series2, [-1, max_len_path*int((win_size+1)/2), dep_state_size])
+    state_series1_4dim = tf.expand_dims(state_series1, axis=-1)
+    state_series2_4dim = tf.expand_dims(state_series2, axis=-1)
+    # print(state_series1)
 
-state_series1_4dim = tf.expand_dims(state_series1, axis=-1)
-state_series2_4dim = tf.expand_dims(state_series2, axis=-1)
-# print(state_series1)
+    with tf.variable_scope("CNN1", reuse=reuse):
+        filter_shape = [win_size, dep_state_size, 1, convolution_state_size]
+        # tf.contrib.xa
+        w = tf.get_variable('w', filter_shape, initializer=he_normal)
+        b = tf.get_variable('b', [convolution_state_size], initializer=he_normal)
+        conv = tf.nn.conv2d(state_series1_4dim, w, strides=[1, int((win_size+1)/2), dep_state_size, 1], padding="VALID",
+                            name="conv")
+        conv_afterrelu = tf.nn.relu(tf.nn.bias_add(conv, b), name="conv_afterrelu")
+        pooled1 = tf.nn.max_pool(conv_afterrelu, ksize=[1, max_len_path-1, 1, 1],
+                                strides=[1, max_len_path-1, 1, 1], padding="SAME", name="max_pool")
+        pooled1_flat = tf.reshape(pooled1, [-1, convolution_state_size])
 
-with tf.variable_scope("CNN1"):
-    filter_shape = [win_size, dep_state_size, 1, convolution_state_size]
-    # tf.contrib.xa
-    w = tf.Variable(tf.random_uniform(filter_shape, -0.1, 0.1), name="w")
-    b = tf.Variable(tf.constant(0.1, shape=[convolution_state_size]), name="b")
-    conv = tf.nn.conv2d(state_series1_4dim, w, strides=[1, int((win_size+1)/2), dep_state_size, 1], padding="VALID",
-                        name="conv")
-    conv_afterrelu = tf.nn.relu(tf.nn.bias_add(conv, b), name="conv_afterrelu")
-    pooled1 = tf.nn.max_pool(conv_afterrelu, ksize=[1, max_len_path-1, 1, 1],
-                            strides=[1, max_len_path-1, 1, 1], padding="SAME", name="max_pool")
-    pooled1_flat = tf.reshape(pooled1, [-1, convolution_state_size])
+    with tf.variable_scope("CNN2", reuse=reuse):
+        filter_shape = [win_size, dep_state_size, 1, convolution_state_size]
 
-with tf.variable_scope("CNN2"):
-    filter_shape = [win_size, dep_state_size, 1, convolution_state_size]
-    w = tf.Variable(tf.random_uniform(filter_shape, -0.1, 0.1), name="w")
-    b = tf.Variable(tf.constant(0.1, shape=[convolution_state_size]), name="b")
-    conv = tf.nn.conv2d(state_series2_4dim, w, strides=[1, (win_size+1)/2, dep_state_size, 1], padding="VALID",
-                        name="conv")
-    conv_afterrelu = tf.nn.relu(tf.nn.bias_add(conv, b), name="conv_afterrelu")
-    pooled2 = tf.nn.max_pool(conv_afterrelu, ksize=[1, max_len_path-1, 1, 1],
-                            strides=[1, max_len_path-1, 1, 1], padding="SAME", name="max_pool")
-    pooled2_flat = tf.reshape(pooled2, [-1, convolution_state_size])
+        w = tf.get_variable('w', filter_shape, initializer=he_normal)
+        b = tf.get_variable('b', [convolution_state_size], initializer=he_normal)
+        conv = tf.nn.conv2d(state_series2_4dim, w, strides=[1, (win_size+1)/2, dep_state_size, 1], padding="VALID",
+                            name="conv")
+        conv_afterrelu = tf.nn.relu(tf.nn.bias_add(conv, b), name="conv_afterrelu")
+        pooled2 = tf.nn.max_pool(conv_afterrelu, ksize=[1, max_len_path-1, 1, 1],
+                                strides=[1, max_len_path-1, 1, 1], padding="SAME", name="max_pool")
+        pooled2_flat = tf.reshape(pooled2, [-1, convolution_state_size])
 
-# with tf.name_scope("hidden_layer"):
-#     W = tf.Variable(tf.truncated_normal([convolution_state_size, 100], -0.1, 0.1), name="W")
-#     b = tf.Variable(tf.zeros([100]), name="b")
-#     y_hidden_layer = tf.matmul(pooled1_flat, W) + b
+    with tf.name_scope("dropout"):
+        pooled1_drop = tf.nn.dropout(pooled1_flat, keep_prob, name='pooled1_drop')
+        pooled2_drop = tf.nn.dropout(pooled2_flat, keep_prob, name='pooled2_drop')
 
-with tf.name_scope("dropout"):
-    pooled1_drop = tf.nn.dropout(pooled1_flat, keep_prob, name='pooled1_drop')
-    pooled2_drop = tf.nn.dropout(pooled2_flat, keep_prob, name='pooled2_drop')
+    with tf.variable_scope("softmax_layer1", reuse=reuse):
+        W = tf.get_variable('w', [convolution_state_size, relation_classes], 
+                                 initializer=he_normal)
+        b = tf.get_variable('b', [relation_classes], initializer=he_normal)
+        logits1 = tf.matmul(pooled1_drop, W) + b
+        predictions1 = tf.argmax(logits1, 1)
 
-with tf.name_scope("softmax_layer1"):
-    W = tf.Variable(tf.random_uniform([convolution_state_size, relation_classes], -0.1, 0.1), name="W")
-    b = tf.Variable(tf.zeros([relation_classes]), name="b")
-    logits1 = tf.matmul(pooled1_drop, W) + b
-    predictions1 = tf.argmax(logits1, 1)
+    with tf.name_scope("softmax_layer2"):
+        # W = tf.Variable(tf.random_uniform([convolution_state_size, relation_classes], -0.1, 0.1), name="W")
+        # b = tf.Variable(tf.zeros([relation_classes]), name="b")
+        logits2 = tf.matmul(pooled2_drop, W) + b
+        predictions2 = tf.argmax(logits2, 1)
 
-with tf.name_scope("softmax_layer2"):
-    # W = tf.Variable(tf.random_uniform([convolution_state_size, relation_classes], -0.1, 0.1), name="W")
-    # b = tf.Variable(tf.zeros([relation_classes]), name="b")
-    logits2 = tf.matmul(pooled2_drop, W) + b
-    predictions2 = tf.argmax(logits2, 1)
+    with tf.variable_scope("softmax_layer", reuse=reuse):
+        pooled_drop = tf.concat([pooled1_drop, pooled2_drop], 1)
+        pooled_drop = tf.reshape(pooled_drop, [-1, convolution_state_size*2])
+        W = tf.get_variable('w', [convolution_state_size*2, 10], 
+                                 initializer=he_normal)
+        b = tf.get_variable('b', [10], initializer=he_normal)
+        logits = tf.matmul(pooled_drop, W) + b
+        predictions = tf.argmax(logits, 1)
 
-with tf.name_scope("softmax_layer"):
-    pooled_drop = tf.concat([pooled1_drop, pooled2_drop], 1)
-    pooled_drop = tf.reshape(pooled_drop, [-1, convolution_state_size*2])
-    W = tf.Variable(tf.random_uniform([convolution_state_size*2, 10], -0.1, 0.1), name="W")
-    b = tf.Variable(tf.zeros([10]), name="b")
-    logits = tf.matmul(pooled_drop, W) + b
-    predictions = tf.argmax(logits, 1)
+        W = tf.get_variable('w1', [convolution_state_size, 10], 
+                                 initializer=he_normal)
+        b = tf.get_variable('b1', [10], initializer=he_normal)
+        logits_coarse = tf.matmul(pooled1_drop, W) + b
 
-predictions_test = tf.argmax(alpha*tf.nn.softmax(logits1) + (1-alpha)*tf.nn.softmax(logits2[::-1]), 1)
+    predictions_test = tf.argmax(alpha*tf.nn.softmax(logits1) + (1-alpha)*tf.nn.softmax(logits2[::-1]), 1)
+
+    return (logits1, logits2, logits, logits_coarse), \
+           (predictions1, predictions2, predictions, predictions_test)
+
+(logits1, logits2, logits, logits_coarse), \
+    (predictions1, predictions2, predictions, predictions_test) = compute_logits(
+                   embedded_word_drop, 
+                   embedded_dep_drop,
+                   reuse=tf.AUTO_REUSE)
 
 tv_all = tf.trainable_variables()
 tv_regu = []
@@ -355,16 +382,53 @@ for t in tv_all:
     if t.name not in non_reg:
         if(t.name.find('biases')==-1):
             tv_regu.append(t)
+l2_loss = lambda_l2 * tf.reduce_sum([tf.nn.l2_loss(v) for v in tv_regu])
 
-with tf.name_scope("loss"):
-    l2_loss = lambda_l2 * tf.reduce_sum([tf.nn.l2_loss(v) for v in tv_regu])
-    loss += tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits1, labels=y1))
-    loss += tf.cond(other, lambda: 0.0, lambda: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits2, labels=y2)))
-    W = tf.Variable(tf.random_uniform([convolution_state_size, 10], -0.1, 0.1), name="W")
-    b = tf.Variable(tf.zeros([10]), name="b")
-    logits_coarse = tf.matmul(pooled1_drop, W) + b
-    loss += tf.cond(other, lambda: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits_coarse, labels=y)), lambda: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=y)))
-    total_loss = loss + l2_loss
+def compute_xentropy_loss(logits1, logits2, logits, logits_coarse):
+    with tf.name_scope("loss"):
+        loss = tf.reduce_mean(
+            tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits1, labels=y1))
+        loss += tf.cond(other, 
+                     lambda: 0.0, 
+                     lambda: tf.reduce_mean(
+                       tf.nn.sparse_softmax_cross_entropy_with_logits(
+                           logits=logits2, labels=y2)))
+        
+        loss += tf.cond(other, 
+            lambda: tf.reduce_mean(
+                tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    logits=logits_coarse, labels=y)), 
+            lambda: tf.reduce_mean(
+                tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    logits=logits, labels=y)))
+    return loss
+
+loss_xent = compute_xentropy_loss(logits1, logits2, logits, logits_coarse)
+
+def adv_example(inputs, loss):
+    grad, = tf.gradients(
+        loss,
+        inputs,
+        aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
+    grad = tf.stop_gradient(grad)
+    perturb = scale_l2(grad)
+
+    return inputs + perturb
+
+def scale_l2(x, eps=1e-3):
+    # scale over the full batch
+    return eps * tf.nn.l2_normalize(x, dim=[0, 1, 2])
+
+adv_word = adv_example(embedded_word_drop, loss_xent)
+adv_dep = adv_example(embedded_dep_drop, loss_xent)
+
+(logits1, logits2, logits, logits_coarse), _ = compute_logits(
+                   adv_word, 
+                   adv_dep,
+                   reuse=tf.AUTO_REUSE)
+adv_loss = compute_xentropy_loss(logits1, logits2, logits, logits_coarse)
+
+total_loss = loss_xent + l2_loss + adv_loss #
 
 with tf.name_scope("accuracy"):
     correct_predictions = tf.equal(predictions_test, y)
@@ -378,18 +442,6 @@ sess = tf.Session()
 sess.run(tf.global_variables_initializer())
 saver = tf.train.Saver()
 sess.run(embedding_init, feed_dict={embedding_placeholder:embeddings})
-
-# sess.run(embedding_init, feed_dict={embedding_placeholder:word_embedding})
-# word_embedding_saver.save(sess, word_embd_dir + '/word_embd')
-
-# pos_embedding_saver.save(sess, pos_embd_dir + '/pos_embd')
-# dep_embedding_saver.save(sess, dep_embd_dir + '/dep_embd')
-
-# model = tf.train.latest_checkpoint(model_dir)
-# saver.restore(sess, model)
-
-# latest_embd = tf.train.latest_checkpoint(word_embd_dir)
-# word_embedding_saver.restore(sess, latest_embd)
 
 max_acc=0.
 max_epoch=0
@@ -477,7 +529,7 @@ for i in range(num_epochs):
     accuracy = 1.0*count/length * 100
     # time_str = datetime.datetime.now().isoformat()
     # print(time_str, "Epoch:", i+1, "Step:", step, "loss:", loss_per_epoch/(num_batches_part1+num_batches_part2), "train accuracy:", accuracy)
-    train_msg = "Epoch %d Step %d loss %.4f train_acc %.4f" % (i+1, step, loss_per_epoch/(num_batches_part1+num_batches_part2), accuracy)
+    train_msg = "Epoch %d Step %d loss_acc %.2f %.2f" % (i+1, step, loss_per_epoch/(num_batches_part1+num_batches_part2), accuracy)
 
     # test predictions
     all_predictions = []
@@ -515,7 +567,7 @@ for i in range(num_epochs):
         count += y_pred[j] == rel_ids_test[j]
     accuracy = 1.0*count/length_test * 100
 
-    print("%s test_acc" % (train_msg, accuracy))
+    print("%s %.2f" % (train_msg, accuracy))
     if accuracy > max_acc:
         max_acc = accuracy
         max_epoch = i
@@ -529,7 +581,7 @@ for i in range(num_epochs):
 
     # f1 = f1_score(rel_ids_test[:2700], y_pred, average='macro')
     # print("sklearn f1_score:", f1)
-    print('')
+    # print('')
 
 print("epoch:", max_epoch+1, "max_accuracy:", max_acc)
 saver.save(sess, model_dir)
