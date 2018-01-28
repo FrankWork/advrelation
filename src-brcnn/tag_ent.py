@@ -10,18 +10,56 @@ def find_ent_position(entities, sentence):
     entities: a list of 2 entities, each entity is a list of tokens
     sentence: a list of tokens
   '''
-  sentence = [token.lower() for token in sentence]
   pos = []
-  for entity in entities:
-    n = len(entity)
-    entity_r = list(reversed(entity))
-    
-    for i in range(len(sentence)):
-      sliced = sentence[i:i+n]
-      if sliced==entity or sliced==entity_r:
-        first, last = i, i+n
-        pos.append(first)
-        pos.append(last)
+  start = 0
+  e1, e2 = entities
+
+  n = len(e1)
+  e1_r = list(reversed(e1))
+  for i in range(start, len(sentence)):
+    sliced = sentence[i:i+n]
+    if sliced==e1 or sliced==e1_r:
+      first, last = i, i+n
+      pos.append(first)
+      pos.append(last)
+      start = last
+      break
+  
+  if len(pos) != 2:
+    for token in e1:
+      if len(pos) == 2:
+        break
+      for i in range(start, len(sentence)):
+        if token == sentence[i]:
+          first, last = i, i+1
+          pos.append(first)
+          pos.append(last)
+          start = last
+          break
+  
+  n = len(e2)
+  e2_r = list(reversed(e2))
+  for i in range(start, len(sentence)):
+    sliced = sentence[i:i+n]
+    if sliced==e2 or sliced==e2_r:
+      first, last = i, i+n
+      pos.append(first)
+      pos.append(last)
+      start = last
+      break
+  
+  if len(pos) != 4:
+    for token in e2:
+      if len(pos) == 4:
+        break
+      for i in range(start, len(sentence)):
+        if token == sentence[i]:
+          first, last = i, i+1
+          pos.append(first)
+          pos.append(last)
+          start = last
+          break
+  
   return pos
 
 def tag(pkl_file, ent_file, out_file):

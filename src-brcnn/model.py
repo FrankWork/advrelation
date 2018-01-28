@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 #from sklearn.metrics import f1_score
 from config import *
+from attention import *
 import gensim
 import datetime
 import math
@@ -210,6 +211,20 @@ pos_vocab_size = len(pos_tag2id)
 dep_vocab_size = len(dep2id)
 print("word_vocab_size=%d\npos_vocab_size=%d\ndep_vocab_size=%d\nmax_len_path=%d"%(word_vocab_size, pos_vocab_size, dep_vocab_size, max_len_path))
 
+train_ent_pos = []
+with open('train_ent_pos.txt') as f:
+    for line in f:
+        tokens = line.strip().split()
+        tokens = [int(x) for x in tokens]
+        train_ent_pos.append(tokens)
+
+test_ent_pos = []
+with open('test_ent_pos.txt') as f:
+    for line in f:
+        tokens = line.strip().split()
+        tokens = [int(x) for x in tokens]
+        test_ent_pos.append(tokens)
+
 keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 other = tf.placeholder(tf.bool, name="other")
 
@@ -222,6 +237,8 @@ with tf.name_scope("input"):
     y1 = tf.placeholder(tf.int64, [None], name="y1")
     y2 = tf.placeholder(tf.int64, [None], name="y2")
     y = tf.placeholder(tf.int64, [None], name="y")
+
+    ent_pos = tf.placeholder(tf.int32, [None, 4], name="ent_pos")
 
 # tf.device("/cpu:0")
 with tf.name_scope("word_embedding"):
@@ -256,6 +273,41 @@ with tf.name_scope("dropout"):
 # word_init_state = tf.contrib.rnn.LSTMStateTuple(word_hidden_state, word_cell_state)
 
 he_normal = tf.keras.initializers.he_normal()
+
+def slice_entity(inputs, ent_pos):
+    '''
+    Args
+      conv_out: [batch, max_len, dim]
+      ent_pos:  [batch, 4]
+    '''
+    # slice ent1
+    # -------(e1.first--e1.last)-------e2.first--e2.last-------
+    begin1 = ent_pos[:, 0]
+    size1 = ent_pos[:, 1] - ent_pos[:, 0]
+
+    # slice ent2
+    # -------e1.first--e1.last-------(e2.first--e2.last)-------
+    begin2 = ent_pos[:, 2]
+    size2 = ent_pos[:, 3] - ent_pos[:, 2]
+    
+    entities = slice_batch_n(inputs, [begin1, begin2], [size1, size2])
+    dim = inputs.shape.as_list()[-1]
+    entities.set_shape(tf.TensorShape([None, None, dim]))
+
+    return entities
+
+def attention(inputs, name, reuse=None):
+    H = inputs
+    hidden_size = inputs.shape.as_list()[-1]
+    with tf.variable_scope(name, reuse=reuse):
+        M = tf.nn.tanh(H) # b,n,d
+        w = tf.get_variable('w-att',[1, hidden_size], initializer=he_normal)
+        batch_size = tf.shape(H)[0]
+        alpha = tf.matmul(tf.tile(tf.expand_dims(w, 0), [batch_size, 1, 1]),
+                        M, transpose_b=True)
+        alpha = tf.nn.softmax(alpha) # b,1,n
+        r = tf.matmul(alpha, H) # b, 1, d
+        return tf.squeeze(r, axis=1)
 
 def compute_logits(embedded_word_drop, 
                    embedded_dep_drop,
@@ -299,6 +351,19 @@ def compute_logits(embedded_word_drop,
     state_series1 = tf.concat([state_series_word1, state_series_dep1], 2)
     state_series2 = tf.concat([state_series_word2, state_series_dep2], 2)
 
+    # with tf.variable_scope('attention', reuse=reuse):
+    #     # inputs = embedded_word_drop
+    #     # ent_out_dim = inputs.shape.as_list()[-1]
+
+    #     # entities = slice_entity(inputs, ent_pos)
+    #     # scaled_entities = multihead_attention(entities, inputs, None, ent_out_dim, 
+    #     #                             ent_out_dim, ent_out_dim, 13)
+    #     # ent_out = tf.nn.relu(scaled_entities)
+    #     # ent_out = tf.reduce_max(ent_out, axis=1)
+    #     att1 = attention(state_series1, 'att1', reuse=reuse)
+    #     att2 = attention(state_series2, 'att2', reuse=reuse)
+    #     att_out_dim = word_state_size + dep_state_size
+
     state_series1 = tf.reshape(state_series1, 
             [-1, max_len_path*int((win_size+1)/2), dep_state_size])
     state_series2 = tf.reshape(state_series2, 
@@ -335,18 +400,25 @@ def compute_logits(embedded_word_drop,
     with tf.name_scope("dropout"):
         pooled1_drop = tf.nn.dropout(pooled1_flat, keep_prob, name='pooled1_drop')
         pooled2_drop = tf.nn.dropout(pooled2_flat, keep_prob, name='pooled2_drop')
+        # att1_drop = tf.nn.dropout(att1, keep_prob)
+        # att2_drop = tf.nn.dropout(att2, keep_prob)
 
     with tf.variable_scope("softmax_layer1", reuse=reuse):
         W = tf.get_variable('w', [convolution_state_size, relation_classes], 
                                  initializer=he_normal)
         b = tf.get_variable('b', [relation_classes], initializer=he_normal)
         logits1 = tf.matmul(pooled1_drop, W) + b
+        # W = tf.get_variable('w', [convolution_state_size+att_out_dim, relation_classes], 
+        #                          initializer=he_normal)
+        # b = tf.get_variable('b', [relation_classes], initializer=he_normal)
+        # logits1 = tf.matmul(tf.concat([pooled1_drop, att1_drop], axis=1), 
+        #                     W) + b
         predictions1 = tf.argmax(logits1, 1)
 
     with tf.name_scope("softmax_layer2"):
-        # W = tf.Variable(tf.random_uniform([convolution_state_size, relation_classes], -0.1, 0.1), name="W")
-        # b = tf.Variable(tf.zeros([relation_classes]), name="b")
         logits2 = tf.matmul(pooled2_drop, W) + b
+        # logits2 = tf.matmul(tf.concat([pooled2_drop, att2_drop], axis=1), 
+        #                     W) + b
         predictions2 = tf.argmax(logits2, 1)
 
     with tf.variable_scope("softmax_layer", reuse=reuse):
@@ -358,33 +430,42 @@ def compute_logits(embedded_word_drop,
         logits = tf.matmul(pooled_drop, W) + b
         predictions = tf.argmax(logits, 1)
 
-        W = tf.get_variable('w1', [convolution_state_size, 10], 
-                                 initializer=he_normal)
-        b = tf.get_variable('b1', [10], initializer=he_normal)
-        logits_coarse = tf.matmul(pooled1_drop, W) + b
+        # pooled_drop = tf.concat([pooled1_drop, pooled2_drop, ent_out_drop], 1)
+        # pooled_drop = tf.reshape(pooled_drop, [-1, convolution_state_size*2+ent_out_dim])
+        # W = tf.get_variable('w', [convolution_state_size*2+ent_out_dim, 10], 
+        #                          initializer=he_normal)
+        # b = tf.get_variable('b', [10], initializer=he_normal)
+        # logits = tf.matmul(pooled_drop, W) + b
+        # predictions = tf.argmax(logits, 1)
 
     predictions_test = tf.argmax(alpha*tf.nn.softmax(logits1) + (1-alpha)*tf.nn.softmax(logits2[::-1]), 1)
 
-    return (logits1, logits2, logits, logits_coarse), \
+    return (logits1, logits2, logits), \
            (predictions1, predictions2, predictions, predictions_test)
 
-(logits1, logits2, logits, logits_coarse), \
+(logits1, logits2, logits), \
     (predictions1, predictions2, predictions, predictions_test) = compute_logits(
                    embedded_word_drop, 
                    embedded_dep_drop,
                    reuse=tf.AUTO_REUSE)
 
 tv_all = tf.trainable_variables()
+for tensor in tv_all:
+    print(tensor.name)
+# exit()
+
 tv_regu = []
 loss = 0.0
 non_reg = ["word_embedding/W:0","pos_embedding/W:0",'dep_embedding/W:0',"global_step:0"]
 for t in tv_all:
     if t.name not in non_reg:
+        if 'multihead_attention' in t.name:
+            continue
         if(t.name.find('biases')==-1):
             tv_regu.append(t)
 l2_loss = lambda_l2 * tf.reduce_sum([tf.nn.l2_loss(v) for v in tv_regu])
 
-def compute_xentropy_loss(logits1, logits2, logits, logits_coarse):
+def compute_xentropy_loss(logits1, logits2, logits):
     with tf.name_scope("loss"):
         loss = tf.reduce_mean(
             tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits1, labels=y1))
@@ -394,16 +475,12 @@ def compute_xentropy_loss(logits1, logits2, logits, logits_coarse):
                        tf.nn.sparse_softmax_cross_entropy_with_logits(
                            logits=logits2, labels=y2)))
         
-        loss += tf.cond(other, 
-            lambda: tf.reduce_mean(
+        loss += tf.reduce_mean(
                 tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    logits=logits_coarse, labels=y)), 
-            lambda: tf.reduce_mean(
-                tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    logits=logits, labels=y)))
+                    logits=logits, labels=y))
     return loss
 
-loss_xent = compute_xentropy_loss(logits1, logits2, logits, logits_coarse)
+loss_xent = compute_xentropy_loss(logits1, logits2, logits)
 
 def adv_example(inputs, loss):
     grad, = tf.gradients(
@@ -420,15 +497,15 @@ def scale_l2(x, eps=1e-3):
     return eps * tf.nn.l2_normalize(x, dim=[0, 1, 2])
 
 adv_word = adv_example(embedded_word_drop, loss_xent)
-adv_dep = adv_example(embedded_dep_drop, loss_xent)
+# adv_dep = adv_example(embedded_dep_drop, loss_xent)
 
-(logits1, logits2, logits, logits_coarse), _ = compute_logits(
+(logits1, logits2, logits), _ = compute_logits(
                    adv_word, 
-                   adv_dep,
+                   embedded_dep_drop,
                    reuse=tf.AUTO_REUSE)
-adv_loss = compute_xentropy_loss(logits1, logits2, logits, logits_coarse)
+adv_loss = compute_xentropy_loss(logits1, logits2, logits)
 
-total_loss = loss_xent + l2_loss + adv_loss #
+total_loss = loss_xent + l2_loss #+ adv_loss #
 
 with tf.name_scope("accuracy"):
     correct_predictions = tf.equal(predictions_test, y)
@@ -449,15 +526,15 @@ for i in range(num_epochs):
     loss_per_epoch = 0
     acc_per_epoch = 0
     if shuffle:
-        data_zip = list(zip(word_p_ids,pos_p_ids,dep_p_ids,dep_p_ids_reverse,rel_ids,path_len))
+        data_zip = list(zip(train_ent_pos, word_p_ids,pos_p_ids,dep_p_ids,dep_p_ids_reverse,rel_ids,path_len))
         data_zip = np.asarray(data_zip)
         shuffle_idx = np.random.permutation(np.arange(length))
         shuffled_data = data_zip[shuffle_idx]
         partitions = np.equal(rel_ids, np.full(length,9))
         shuffled_data_part1 = shuffled_data[~partitions]
         shuffled_data_part2 = shuffled_data[partitions]
-        word_p_ids_part1,pos_p_ids_part1,dep_p_ids_part1,dep_p_ids_reverse_part1,rel_ids_part1,path_len_part1 = zip(*shuffled_data_part1)
-        word_p_ids_part2,pos_p_ids_part2,dep_p_ids_part2,dep_p_ids_reverse_part2,rel_ids_part2,path_len_part2 = zip(*shuffled_data_part2)
+        train_ent_pos_part1, word_p_ids_part1,pos_p_ids_part1,dep_p_ids_part1,dep_p_ids_reverse_part1,rel_ids_part1,path_len_part1 = zip(*shuffled_data_part1)
+        train_ent_pos_part2, word_p_ids_part2,pos_p_ids_part2,dep_p_ids_part2,dep_p_ids_reverse_part2,rel_ids_part2,path_len_part2 = zip(*shuffled_data_part2)
 
     num_batches_part1 = int(math.ceil(len(shuffled_data_part1)/BATCH_SIZE))
     # print(len(shuffled_data_part1),num_batches_part1)
@@ -468,6 +545,7 @@ for i in range(num_epochs):
         start_index = j*BATCH_SIZE
         end_index = min((j+1)*BATCH_SIZE, len(shuffled_data_part1))
         path_dict = path_len_part1[start_index:end_index]
+        ent_pos_dict = train_ent_pos_part1[start_index:end_index]
         word_dict = word_p_ids_part1[start_index:end_index]
         pos_dict = pos_p_ids_part1[start_index:end_index]
         dep_dict = dep_p_ids_part1[start_index:end_index]
@@ -475,9 +553,11 @@ for i in range(num_epochs):
         y1_dict = rel_ids_part1[start_index:end_index]
         y2_dict = [-(y1+1-19) for y1 in y1_dict]
         y_dict = [-(y1+1-19) if y1>9 else y1 for y1 in y1_dict]
+        
 
         feed_dict = {
             path_length:path_dict,
+            ent_pos: ent_pos_dict,
             word_ids:word_dict,
             pos_ids:pos_dict,
             dep_ids:dep_dict,
@@ -495,6 +575,7 @@ for i in range(num_epochs):
         start_index = j*BATCH_SIZE
         end_index = min((j+1)*BATCH_SIZE, len(shuffled_data_part2))
         path_dict = path_len_part2[start_index:end_index]
+        ent_pos_dict = train_ent_pos_part2[start_index:end_index]
         word_dict = word_p_ids_part2[start_index:end_index]
         pos_dict = pos_p_ids_part2[start_index:end_index]
         dep_dict = dep_p_ids_part2[start_index:end_index]
@@ -505,6 +586,7 @@ for i in range(num_epochs):
 
         feed_dict = {
             path_length:path_dict,
+            ent_pos: ent_pos_dict,
             word_ids:word_dict,
             pos_ids:pos_dict,
             dep_ids:dep_dict,
@@ -536,6 +618,7 @@ for i in range(num_epochs):
     for j in range(num_batches_test):
         end_index = min((j+1)*BATCH_SIZE, length_test)
         path_dict = path_len_test[j*batch_size:end_index]
+        ent_pos_dict = test_ent_pos[j*batch_size:end_index]
         word_dict = word_p_ids_test[j*batch_size:end_index]
         pos_dict = pos_p_ids_test[j*batch_size:end_index]
         dep_dict = dep_p_ids_test[j*batch_size:end_index]
@@ -546,6 +629,7 @@ for i in range(num_epochs):
 
         feed_dict = {
             path_length:path_dict,
+            ent_pos: ent_pos_dict,
             word_ids:word_dict,
             pos_ids:pos_dict,
             dep_ids:dep_dict,
