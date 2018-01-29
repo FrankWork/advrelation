@@ -73,9 +73,9 @@ class RNNModel(BaseModel):
     with tf.name_scope("loss"):
       losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     logits=logits, labels=labels)
-            mask = tf.sequence_mask(self.sequence_lengths)
-            losses = tf.boolean_mask(losses, mask)
-            self.loss = tf.reduce_mean(losses)
+      mask = tf.sequence_mask(self.sequence_lengths)
+      losses = tf.boolean_mask(losses, mask)
+      self.loss = tf.reduce_mean(losses)
 
     return tf.reduce_mean(cross_entropy)
   
