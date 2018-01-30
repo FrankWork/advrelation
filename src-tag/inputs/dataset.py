@@ -341,30 +341,3 @@ def to_example(dictionary):
       raise ValueError("Value for %s is not a recognized type; v: %s type: %s" %
                        (k, str(v[0]), str(type(v[0]))))
   return tf.train.Example(features=tf.train.Features(feature=features))
-
-def relative_distance(n):
-  '''convert relative distance to positive number
-  -60), [-60, 60], (60
-  '''
-  if n < -60:
-    return 0
-  elif n >= -60 and n <= 60:
-    return n + 61
-  
-  return 122
-
-def position_feature(e_first, e_last, length):
-  pos = []
-  if e_first >= length:
-    e_first = length-1
-  if e_last >= length:
-    e_last = length-1
-
-  for i in range(length):
-    if i<e_first:
-      pos.append(relative_distance(i-e_first))
-    elif i>=e_first and i<=e_last:
-      pos.append(relative_distance(0))
-    else:
-      pos.append(relative_distance(i-e_last))
-  return pos

@@ -15,6 +15,7 @@ def _get_hparams():
   return hparams
 
 class Config(object):
+  
   hparams = _get_hparams()
   logdir = "saved_models/"
   save_dir = "tag_model"

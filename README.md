@@ -9,6 +9,10 @@
 - residual
 - Subword token | char level
 
+## fastText
+
+cat query.txt | ./fasttext print-word-vectors wiki.en.bin
+
 ## src
 
 - src: SemEval binary MTL
