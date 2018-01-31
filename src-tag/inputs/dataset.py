@@ -6,21 +6,76 @@ from collections import defaultdict
 import numpy as np
 import tensorflow as tf
 
-PRETRAIN_DIR = "data/pretrain"
-OUT_DIR = "data/generated"
+class VocabBase(object):
 
-GOOGLE_EMBED300_FILE = "embed300.google.npy"
-GOOGLE_WORDS_FILE = "google_words.lst"
-TRIMMED_EMBED300_FILE = "embed300.trim.npy"
+  def __init__(self, vocab_file):
+    self.vocab_file = vocab_file
+    self._vocab = None
+    self._vocab2id = None
 
-VOCAB_SIZE = None#2**13 # 8k, 22k
-VOCAB_FILE = "vocab.txt"
+  def load_vocab(self, vocab_file):
+    vocab = []
+    with open(vocab_file) as f:
+      for line in f:
+        token = line.strip()
+        vocab.append(token)
+    return vocab
+  
+  def build_vocab2id_dict(self, vocab):
+    vocab2id = {}
+    for id, token in enumerate(vocab):
+      vocab2id[token] = id
+    return vocab2id
+  
+  @property
+  def vocab(self):
+    if self._vocab is None:
+      self._vocab = self.load_vocab(self.vocab_file)
+    return self._vocab
 
-class VocabMgr(object):
-  def __init__(self, out_dir=OUT_DIR, vocab_file=VOCAB_FILE, 
+  @property
+  def vocab2id(self):
+    if self._vocab2id is None:
+      self._vocab2id = self.build_vocab2id_dict(self.vocab)
+    return self._vocab2id
+
+  def encode(self, tokens, unk=None):
+    '''convert a list of tokens to a list of ids
+    Args:
+      tokens: list, [token0, token1, .. ]
+    '''
+    ids = []
+    for token in tokens:
+      if token in self.vocab2id:
+        tok_id = self.vocab2id[token]
+        ids.append(tok_id)
+      else if unk is not None:
+        unk_id = self.vocab2id[unk]
+        ids.append(unk_id)
+
+    return ids
+
+  def decode(self, ids):
+    tokens = []
+    for id in ids:
+      tok = self.vocab[id]
+      tokens.append(id)
+    return tokens
+
+
+class Label(VocabBase):
+  def __init__(self, data_dir, label_file):
+    self.data_dir = data_dir
+    label_file = os.path.join(data_dir, label_file)
+    super().__init__(label_file)
+  
+
+class Vocab(VocabBase):
+  def __init__(self, out_dir, vocab_file, 
                 vocab_freq_file=None, max_vocab_size=None, min_vocab_freq=None):
     self.out_dir = out_dir
-    self.vocab_file = os.path.join(out_dir, vocab_file)
+    vocab_file = os.path.join(out_dir, vocab_file)
+
     if vocab_freq_file:
       self.vocab_freq_file = os.path.join(out_dir, vocab_freq_file)
     else:
@@ -30,34 +85,7 @@ class VocabMgr(object):
     self.pad_token = '<PAD>'
     self.pad_id = 0
 
-    self._vocab = None
-    self._vocab2id = None
-  
-  def _load_vocab_from_file(self, vocab_file):
-    vocab = []
-    with open(vocab_file) as f:
-      for line in f:
-        w = line.strip()
-        vocab.append(w)
-    return vocab
-
-  def _build_vocab2id(self, vocab):
-    vocab2id = {}
-    for id, token in enumerate(vocab):
-      vocab2id[token] = id
-    return vocab2id
-
-  @property
-  def vocab(self):
-    if self._vocab is None:
-      self._vocab = self._load_vocab_from_file(self.vocab_file)
-    return self._vocab
-
-  @property
-  def vocab2id(self):
-    if self._vocab2id is None:
-      self._vocab2id = self._build_vocab2id(self.vocab)
-    return self._vocab2id
+    super().__init__(vocab_file)
 
   def _generate_vocab_inner(self, token_generator):
     vocab_freqs = defaultdict(int)
@@ -103,20 +131,30 @@ class VocabMgr(object):
     if freq_f:
       freq_f.close()
 
-  def trim_pretrain_embedding(self, trimed_embed_file=TRIMMED_EMBED300_FILE, 
-                              pretrain_dir=PRETRAIN_DIR, 
-                              pretrain_embed_file=GOOGLE_EMBED300_FILE, 
-                              pretrain_vocab_file=GOOGLE_WORDS_FILE):
+
+class Embed(object):
+  def __init__(self, embed_dir, embed_file):
+    self.embed_file = os.path.join(embed_dir, embed_file)
+  
+  def load_embedding(self, embed_file=None):
+    if embed_file is None:
+      embed_file = self.embed_file
+
+    if embed_file.endswith('.npz'):
+      tensor_dict = np.load(embed_file)
+      return tensor_dict['word_embed']
+
+    return np.load(embed_file) # .npy file
+    
+  def trim_pretrain_embedding(self, trimmed_vocab,
+                      pretrain_dir, pretrain_embed_file, pretrain_vocab_file):
     '''trim unnecessary words from original pre-trained word embedding'''
+    tf.logging.info('trim embedding to %s'%self.embed_file)
+
     pretrain_embed_file = os.path.join(pretrain_dir, pretrain_embed_file)
-    pretrain_vocab_file = os.path.join(pretrain_dir, pretrain_vocab_file)
-    trimed_embed_file = os.path.join(self.out_dir, trimed_embed_file)
-
-    tf.logging.info('trim embedding to %s'%trimed_embed_file)
-
-    pretrain_embed    = np.load(pretrain_embed_file)
-    pretrain_vocab = self._load_vocab_from_file(pretrain_vocab_file)
-    pretrain_words2id = self._build_vocab2id(pretrain_vocab)
+    pretrain_embed    = self.load_embedding(pretrain_embed_file)
+    vocab_object = Vocab(pretrain_dir, pretrain_vocab_file)
+    pretrain_words2id = vocab_object.vocab2id
 
     word_embed=[]
     word_dim = pretrain_embed.shape[1]
@@ -131,22 +169,7 @@ class VocabMgr(object):
     word_embed[self.pad_id] = np.zeros([word_dim])
 
     word_embed = np.asarray(word_embed)
-    np.save(trimed_embed_file, word_embed.astype(np.float32))
-
-  def load_embedding(self, embed_file=TRIMMED_EMBED300_FILE):
-    return np.load(os.path.join(OUT_DIR, embed_file))
-
-  def map_token_to_id(self, tokens):
-    '''convert a list of tokens to a list of ids
-    Args:
-      tokens: list, [token0, token1, .. ]
-    '''
-    ids = []
-    for token in tokens:
-      if token in self.vocab2id:
-        tok_id = self.vocab2id[token]
-        ids.append(tok_id)
-    return ids
+    np.save(self.embed_file, word_embed.astype(np.float32))
 
 class Dataset(object):
 
@@ -213,7 +236,7 @@ class TextDataset(Dataset):
 
 class RecordDataset(Dataset):
 
-  def __init__(self, text_dataset, out_dir=OUT_DIR, train_record_file=None, 
+  def __init__(self, text_dataset, out_dir, train_record_file=None, 
                test_record_file=None, unsup_record_file=None):
     self.text_dataset = text_dataset
 

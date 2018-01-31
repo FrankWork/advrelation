@@ -10,6 +10,7 @@ def _get_hparams():
     l2_scale               = 0.001,
     dropout_rate           = 0.5,
     learning_rate          = 0.001,
+    max_norm               = None
     )
   
   return hparams
@@ -17,8 +18,25 @@ def _get_hparams():
 class Config(object):
   
   hparams = _get_hparams()
+  
   logdir = "saved_models/"
   save_dir = "tag_model"
+  
+  out_dir = "data/generated"
+
+  semeval_dir = "data/SemEval"
+  semeval_train_file = "train.cln"
+  semeval_test_file = "test.cln"
+  semeval_train_record = "train.semeval.tfrecord"
+  semeval_test_record = "test.semeval.tfrecord"
+  semeval_results_file = "results.txt"
+
+  google_embed300_file = "embed300.google.npy"
+  google_words_file = "google_words.lst"
+  trimmed_embed300_file = "embed300.trim.npy"
+
+  vocab_size = None
+  vocab_file = "vocab.txt"
 
 _config = Config()
 

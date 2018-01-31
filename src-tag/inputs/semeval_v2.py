@@ -5,22 +5,10 @@ import random
 from inputs import dataset
 import tensorflow as tf
 
-DATA_DIR = "data/SemEval"
-OUT_DIR = "data/generated"
-
-TRAIN_FILE = "train.cln"
-TEST_FILE = "test.cln"
-LABEL_FILE = "relations.txt"
-
-TRAIN_RECORD = "train.semeval.tfrecord"
-TEST_RECORD = "test.semeval.tfrecord"
-RESULTS_FILE = "results.txt"
-
 class SemEvalCleanedTextData(dataset.TextDataset):
  
-  def __init__(self, data_dir=DATA_DIR, train_file=TRAIN_FILE, test_file=TEST_FILE):
-    super().__init__(data_dir, 
-          train_file=train_file, test_file=test_file)
+  def __init__(self, data_dir, train_file, test_file):
+    super().__init__(data_dir, train_file=train_file, test_file=test_file)
 
   def token_generator(self, file):
     with open(file) as f:
