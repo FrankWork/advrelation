@@ -33,7 +33,6 @@ class TagConverter(object):
 
 
 
-
 class SemEvalCleanedTextData(dataset.TextDataset):
  
   def __init__(self, data_dir, train_file, test_file):
