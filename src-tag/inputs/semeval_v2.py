@@ -5,6 +5,35 @@ import random
 from inputs import dataset
 import tensorflow as tf
 
+class TagConverter(object):
+  def __init__(self, data_dir, class_label_file, tag_file):
+    self.class_label = dataset.Label(data_dir, class_label_file)
+    self.tags = dataset.Label(data_dir, tag_file)
+  
+  def extract_rel_from_label_text(self, label_id):
+    label_text = self.class_label.vocab[label_id]
+    seg_idx = label_text.find('(')
+    if seg_idx == -1:
+      return 'O'
+    relation = label_text[:seg_idx]
+    # direction = label_text[seg_idx:]
+
+    seg_idx = relation.find('-')
+    return relation[0] + relation[seg_idx+1]
+  
+  def convert_to_tag(self, label_id, ent_indices, length):
+    default_tag_id = self.tags.vocab['O']
+    tag_ids = [default_tag_id for _ in range(length)]
+
+    e1_begin, e1_end = ent_indices[0], ent_indices[1]+1
+    e2_begin, e2_end = ent_indices[2], ent_indices[3]+1
+
+    
+
+
+
+
+
 class SemEvalCleanedTextData(dataset.TextDataset):
  
   def __init__(self, data_dir, train_file, test_file):
@@ -28,13 +57,14 @@ class SemEvalCleanedTextData(dataset.TextDataset):
           length.append(n)
     return length
 
+
   def example_generator(self, file):
     with open(file) as f:
       for line in f:
         words = line.strip().split(' ')
         
         sent = words[5:]
-        sent = self.vocab_mgr.map_token_to_id(sent)
+        sent = self.vocab.encode(sent)
         length = len(sent)
 
         label = int(words[0])

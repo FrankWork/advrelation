@@ -203,8 +203,8 @@ class TextDataset(Dataset):
     if self.unsup_file:
       self.unsup_file = os.path.join(data_dir, self.unsup_file)
 
-  def set_vocab_mgr(self, vocab_mgr):
-    self.vocab_mgr = vocab_mgr
+  def set_vocab(self, vocab):
+    self.vocab = vocab
 
   def tokens(self):
     for token in self.token_generator(self.train_file):
