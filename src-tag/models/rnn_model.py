@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import tensorflow as tf
 # from models.adv import *
@@ -10,8 +11,6 @@ class BaseModel(object):
     self.config = config
     self.hparams = config.hparams
 
-    self.set_saver(self.config.save_dir)
-
     # embedding initialization
     self.word_embed = tf.get_variable('word_embed', initializer= ini_word_embed,
                       dtype=tf.float32, trainable=self.hparams.tune_word_embed)
@@ -21,17 +20,15 @@ class BaseModel(object):
     initializer = tf.keras.initializers.he_normal()
     self.regularizer = tf.contrib.layers.l2_regularizer(self.hparams.l2_scale)
 
-    with tf.variable_scope('model_graph', initializer=self.initializer):
+    with tf.variable_scope('model_graph', initializer=initializer):
       self.build_graph(batched_data)
+    
+    self.set_saver()
 
-  def set_saver(self, save_dir):
-    '''
-    Args:
-      save_dir: relative path
-    '''
+  def set_saver(self):
     # shared between train and valid model instance
     self.saver = tf.train.Saver(var_list=None)
-    self.save_dir = os.path.join(self.config.logdir, save_dir)
+    self.save_dir = os.path.join(self.config.logdir, self.config.save_dir)
     self.save_path = os.path.join(self.save_dir, "model.ckpt")
 
   def restore(self, session):
@@ -94,7 +91,7 @@ class RNNModel(BaseModel):
                     cell_de, helper, en_state,
                     output_layer=proj_layer)
       # Dynamic decoding
-      outputs, _ = tf.contrib.seq2seq.dynamic_decode(decoder)
+      outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder)
       logits = outputs.rnn_output
 
     return logits
@@ -110,8 +107,10 @@ class RNNModel(BaseModel):
     return tf.reduce_mean(losses)
   
   def build_graph(self, data):
-    (sentence, labels, lengths) = data
+    (lengths, sentence, labels) = data
     sentence = self.embed_layer(sentence)
+    lengths = tf.identity(lengths)
+    labels = tf.identity(labels)
 
     # cross entropy loss
     logits = self.compute_logits(sentence, lengths)
@@ -123,7 +122,9 @@ class RNNModel(BaseModel):
     
     # prediction
     with tf.name_scope("prediction"):
-      pred = tf.argmax(logits, axis=1)
+      pred = tf.argmax(logits, axis=-1)
+
+    self.tensors['logits'] = logits
 
     self.tensors['loss'] = loss_xent #+ loss_adv + loss_l2
     self.tensors['pred'] = pred
@@ -132,16 +133,18 @@ class RNNModel(BaseModel):
 
     self.maybe_build_train_op()
 
-  def train_epoch(self, session, num_batches_per_peoch):
+  def train_epoch(self, session, num_batches_per_epoch):
     if not self.is_train:
       return
 
     moving_loss, moving_acc = [], []
-    for batch in range(num_batches_per_peoch):
+    for batch in range(num_batches_per_epoch):
       train_op = self.train_ops['train_loss']
-      fetches = [train_op, self.tensors['loss'], self.tensors['pred'],
-            self.tensors['lengths'], self.tensors['labels']]
-      _, loss, preds, lengths, labels = session.run(fetches)
+      fetches = [train_op, self.tensors['lengths'], self.tensors['labels'], 
+                 self.tensors['pred'], self.tensors['loss']
+                ]
+      _, lengths, labels, preds, loss = session.run(fetches)
+
       moving_loss.append(loss)
 
       for lab, lab_pred, length in zip(labels, preds, lengths):
@@ -152,13 +155,14 @@ class RNNModel(BaseModel):
     
     return np.mean(moving_loss), np.mean(moving_acc)*100
 
-  def evaluate(self, session, test_ds_iter, num_batches, vocab_tags):
+  def evaluate(self, session, test_ds_iter, num_batches, vocab_tags, return_pred=False):
     if self.is_train:
       return
 
     session.run(test_ds_iter.initializer)
 
     accs = []
+    pred_list = []
     correct_preds, total_correct, total_preds = 0., 0., 0.
     for batch in range(num_batches):
       fetches = [self.tensors['pred'], self.tensors['lengths'], 
@@ -169,6 +173,7 @@ class RNNModel(BaseModel):
         lab_pred = lab_pred[:length]
         acc = np.mean(np.equal(lab, lab_pred))
         accs.append(acc)
+        pred_list.append(lab_pred)
 
         lab_chunks      = set(get_chunks(lab, vocab_tags))
         lab_pred_chunks = set(get_chunks(lab_pred, vocab_tags))
@@ -181,6 +186,9 @@ class RNNModel(BaseModel):
     r   = correct_preds / total_correct if correct_preds > 0 else 0
     f1  = 2 * p * r / (p + r) if correct_preds > 0 else 0
     acc = np.mean(accs)
+
+    if return_pred:
+      return pred_list
 
     return 100*acc, 100*f1
 
@@ -238,6 +246,21 @@ def get_chunks(seq, tags, default_tag='O'):
     chunks.append(chunk)
 
   return chunks
+
+def get_chunk_type(tok, idx_to_tag):
+    """
+    Args:
+        tok: id of token, ex 4
+        idx_to_tag: dictionary {4: "B-PER", ...}
+
+    Returns:
+        tuple: "B", "PER"
+
+    """
+    tag_name = idx_to_tag[tok]
+    tag_class = tag_name.split('-')[0]
+    tag_type = tag_name.split('-')[1]
+    return tag_class, tag_type
 
 def build_train_valid_model(config, ini_word_embed, train_data, test_data):
   with tf.name_scope("Train"):

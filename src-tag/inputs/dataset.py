@@ -59,7 +59,7 @@ class VocabBase(object):
     tokens = []
     for id in ids:
       tok = self.vocab[id]
-      tokens.append(id)
+      tokens.append(tok)
     return tokens
 
 class Label(VocabBase):

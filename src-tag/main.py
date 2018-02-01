@@ -4,56 +4,26 @@ import sys
 import tensorflow as tf
 import numpy as np
 
-from inputs import  dataset, nyt2010, semeval_v2
+from inputs import  dataset, semeval_v2
 from models import rnn_model
+import config as config_lib
 
 # tf.set_random_seed(0)
 # np.random.seed(0)
 
 flags = tf.app.flags
-
-flags.DEFINE_integer("word_dim", 300, "word embedding size")
-flags.DEFINE_integer("num_epochs", 50, "number of epochs")
-flags.DEFINE_integer("batch_size", 100, "batch size")
-
-flags.DEFINE_boolean('is_adv', False, 'set True to use adv training')
 flags.DEFINE_boolean('is_test', False, 'set True to test')
-
 FLAGS = tf.app.flags.FLAGS
-
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
-def train_semeval(sess, m_train, m_valid, test_iter):
-  best_acc, best_epoch = 0., 0
+def train_semeval(config, session, m_train, m_valid, test_iter, vocab_tags):
+  best_f1, best_epoch = 0., 0
   start_time = time.time()
   orig_begin_time = start_time
-
-  # unsup train
-  # for epoch in range(2):
-  # for batch in range(1001):
-  #   train_op = m_train.train_ops['train_unsup_loss']
-  #   _, loss = sess.run([train_op, m_train.tensors['unsup_loss']])
   
-  # now = time.time()
-  # duration = now - start_time
-  # start_time = now
-  # print('loss %.4f time %.2f' % (loss, duration))
-  
-  for epoch in range(FLAGS.num_epochs):
-    sess.run([test_iter.initializer])
-
-    # train SemEval
-    sem_loss, sem_acc = 0., 0.
-    for batch in range(80):
-      train_op = m_train.train_ops['train_loss']
-      fetches = [train_op, m_train.tensors['loss'], m_train.tensors['acc']]
-      _, loss, acc = sess.run(fetches)
-      sem_loss += loss
-      sem_acc += acc
-
-    sem_loss /= 80
-    sem_acc /= 80
+  for epoch in range(config.hparams.num_epochs):
+    loss, acc = m_train.train_epoch(session, 80)
 
     # epoch duration
     now = time.time()
@@ -61,87 +31,79 @@ def train_semeval(sess, m_train, m_valid, test_iter):
     start_time = now
 
     # valid accuracy
-    sem_valid_acc = 0.
-    for batch in range(28):
-      acc = sess.run(m_valid.tensors['acc'])
-      sem_valid_acc += acc
-    sem_valid_acc /= 28
+    valid_acc, f1 = m_valid.evaluate(session, test_iter, 28, vocab_tags.vocab2id)
 
-    if best_acc < sem_valid_acc:
-      best_acc = sem_valid_acc
+    if best_f1 < f1:
+      best_f1 = f1
       best_epoch = epoch
-      m_train.save(sess, epoch)
+      m_train.save(session, epoch)
     
-    print("Epoch %d sem %.2f %.2f %.4f time %.2f" % 
-             (epoch, sem_loss, sem_acc, sem_valid_acc, duration))
+    print("Epoch %d train %.2f %.2f valid %.2f %.2f time %.2f" % 
+             (epoch, loss, acc, valid_acc, f1, duration))
     sys.stdout.flush()
   
   duration = time.time() - orig_begin_time
   duration /= 3600
-  print('Done training, best_epoch: %d, best_acc: %.4f' % (best_epoch, best_acc))
+  print('Done training, best_epoch: %d, best_f1: %.4f' % (best_epoch, best_f1))
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
 
-def test(sess, m_valid, test_iter):
-  m_valid.restore(sess)
-  sess.run([test_iter.initializer])
-  acc_tenser = m_valid.tensors['acc']
-  pred_tensor = m_valid.tensors['pred']
+def test(session, m_valid, test_iter, vocab_tags):
+  
+  m_valid.restore(session)
+  tags = m_valid.evaluate(session, test_iter, 28, vocab_tags.vocab2id, return_pred=True)
+  tags = [vocab_tags.decode(x) for x in tags]
+  # print(len(tags))
+  # print(tags[0])
 
-  acc_all = 0.
-  pred_all = []
-  for batch in range(28):
-    acc, pred = sess.run([acc_tenser, pred_tensor])
-    acc_all += acc
-    pred_all.append(pred)
-  acc_all /= 28
+  for tag_list in tags:
+    tag_list = [x for x in tag_list if x!='O']
+    print(' '.join(tag_list))
 
-  print('acc: %.4f' % acc_all)
-  # print(type(pred_all[0]))
-  # print(pred_all[0].shape)
-  pred_all = np.concatenate(pred_all)
-  # print(type(pred_all))
-  # print(pred_all.shape)
-  # exit()
-  semeval_v2.write_results(pred_all)
+  # print(vocab_tags.decode(tags[0]))
+
+  # print(vocab_tags.vocab)
+
+  # semeval_v2.write_results(pred_all)
 
 def main(_):
-  vocab_mgr = dataset.VocabMgr()
-  word_embed = vocab_mgr.load_embedding()
-  nyt_record = nyt2010.NYT2010CleanedRecordData(None)
-  semeval_record = semeval_v2.SemEvalCleanedRecordData(None)
+  config = config_lib.get_config()
+  embed = dataset.Embed(config.out_dir, config.trimmed_embed300_file, config.vocab_file)
+  ini_word_embed = embed.load_embedding()
+
+  semeval_record = semeval_v2.SemEvalCleanedRecordData(None,
+        config.out_dir, config.semeval_train_record, config.semeval_test_record)
+  
+  vocab_tags = dataset.Label(config.semeval_dir, config.semeval_tags_file)
+  
 
   with tf.Graph().as_default():
-    train_iter = semeval_record.train_data(FLAGS.num_epochs, FLAGS.batch_size)
-    test_iter = semeval_record.test_data(1, FLAGS.batch_size)
-    # unsup_iter = nyt_record.unsup_data(FLAGS.num_epochs, FLAGS.batch_size)
+    train_iter = semeval_record.train_data(config.hparams.num_epochs, config.hparams.batch_size)
+    test_iter = semeval_record.test_data(1, config.hparams.batch_size)
+
                                           
-    model_name = 'cnn-%d-%d' % (FLAGS.word_dim, FLAGS.num_epochs)
     train_data = train_iter.get_next()
     test_data = test_iter.get_next()
-    # unsup_data = unsup_iter.get_next()
-    unsup_data = None
-    m_train, m_valid = rnn_model.build_train_valid_model(
-                          model_name, word_embed,
-                          train_data, test_data, unsup_data,
-                          FLAGS.is_adv, FLAGS.is_test)
+
+    m_train, m_valid = rnn_model.build_train_valid_model(config, 
+                                          ini_word_embed, train_data, test_data)
 
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+    sess_config = tf.ConfigProto()
+    sess_config.gpu_options.allow_growth = True
 
     for tensor in tf.trainable_variables():
       tf.logging.info(tensor.op.name)
-    
-    with tf.Session(config=config) as sess:
+        
+    with tf.Session(config=sess_config) as sess:
       sess.run(init_op)
       print('='*80)
 
       if FLAGS.is_test:
-        test(sess, m_valid, test_iter)
+        test(sess, m_valid, test_iter, vocab_tags)
       else:
-        train_semeval(sess, m_train, m_valid, test_iter)
+        train_semeval(config, sess, m_train, m_valid, test_iter, vocab_tags)
 
 if __name__ == '__main__':
   tf.app.run()

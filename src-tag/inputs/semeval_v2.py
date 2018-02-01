@@ -47,21 +47,24 @@ class TagConverter(object):
     return tags_str
 
   def convert_to_tag(self, label_id, ent_indices, length):
-    default_tag_id = self.tags.vocab2id['O']
-    tag_ids = [default_tag_id for _ in range(length)]
+    default_tag = 'O'
+    tags_str = [default_tag for _ in range(length)]
 
     e1_begin, e1_end = ent_indices[0], ent_indices[1]+1
     e2_begin, e2_end = ent_indices[2], ent_indices[3]+1
 
     rel_str, e1_is_head = self.extract_rel_from_label_text(label_id)
 
-    tags_str = self.build_tag(e1_begin, e1_end, rel_str, e1_is_head)
-    tag_ids[e1_begin: e1_end] = self.tags.encode(tags_str)
+    tags_ent = self.build_tag(e1_begin, e1_end, rel_str, e1_is_head)
+    tags_str[e1_begin: e1_end] = tags_ent
 
-    tags_str = self.build_tag(e2_begin, e2_end, rel_str, not e1_is_head)
-    tag_ids[e2_begin: e2_end] = self.tags.encode(tags_str)
+    tags_ent = self.build_tag(e2_begin, e2_end, rel_str, not e1_is_head)
+    tags_str[e2_begin: e2_end] = tags_ent
+    tf.logging.debug(tags_str)
 
-    return tag_ids
+    return self.tags.encode(tags_str)
+
+  
 
 
 class SemEvalCleanedTextData(dataset.TextDataset):
@@ -97,6 +100,7 @@ class SemEvalCleanedTextData(dataset.TextDataset):
         words = line.strip().split(' ')
         
         sent = words[5:]
+        tf.logging.debug(sent)
         sent = self.vocab.encode(sent)
         length = len(sent)
 
@@ -107,6 +111,9 @@ class SemEvalCleanedTextData(dataset.TextDataset):
         ent_indices = [e1_first, e1_last, e2_first, e2_last]
 
         labels = self.tag_converter.convert_to_tag(label_id, ent_indices, length)
+        tf.logging.debug(' ')
+
+        assert len(sent) == len(labels)
 
         yield {
           'labels': labels, 'length': [length], 'sentence': sent}
@@ -126,9 +133,9 @@ class SemEvalCleanedRecordData(dataset.RecordDataset):
     feat_dict = tf.parse_single_example(example, features)
 
     # load from disk
-    labels = feat_dict['labels']
     length = tf.cast(feat_dict['length'], tf.int32)
     sentence = tf.sparse_tensor_to_dense(feat_dict['sentence'])
+    labels = tf.sparse_tensor_to_dense(feat_dict['labels'])
 
     return length, sentence, labels
   

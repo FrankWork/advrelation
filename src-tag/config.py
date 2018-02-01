@@ -3,10 +3,12 @@ def _get_hparams():
   import tensorflow as tf
 
   hparams =  tf.contrib.training.HParams(
+    num_epochs             = 50,
+    batch_size             = 100,
     word_embed_size        = 300, 
     tune_word_embed        = False,
     hidden_size            = 300,
-    num_tags               = 0,
+    num_tags               = 81,
     l2_scale               = 0.001,
     dropout_rate           = 0.5,
     learning_rate          = 0.001,
