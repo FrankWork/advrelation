@@ -11,31 +11,63 @@ class TagConverter(object):
     self.tags = dataset.Label(data_dir, tag_file)
   
   def extract_rel_from_label_text(self, label_id):
+    e1_is_head = True
+    rel_str = 'O'
+
     label_text = self.class_label.vocab[label_id]
     seg_idx = label_text.find('(')
     if seg_idx == -1:
-      return 'O'
+      return rel_str, e1_is_head
+
     relation = label_text[:seg_idx]
-    # direction = label_text[seg_idx:]
+    direction = label_text[seg_idx:]
 
     seg_idx = relation.find('-')
-    return relation[0] + relation[seg_idx+1]
-  
+    rel_str = relation[0] + relation[seg_idx+1]
+    if direction == '(e2,e1)':
+      e1_is_head = False
+    return rel_str, e1_is_head
+
+  def build_tag(self, e_begin, e_end, rel_str, is_head=True):
+    n = e_end - e_begin
+    rel_role = '1' if is_head else '2'
+    tag_template = '%s-%s-%s'
+    tags_str = []
+
+    if n == 1:
+      tags_str.append(tag_template % ('S', rel_str, rel_role))
+    elif n == 2:
+      tags_str.append(tag_template % ('B', rel_str, rel_role))
+      tags_str.append(tag_template % ('E', rel_str, rel_role))
+    else:
+      tags_str.append(tag_template % ('B', rel_str, rel_role))
+      for _ in range(n-2):
+        tags_str.append(tag_template % ('I', rel_str, rel_role))
+      tags_str.append(tag_template % ('E', rel_str, rel_role))
+    return tags_str
+
   def convert_to_tag(self, label_id, ent_indices, length):
-    default_tag_id = self.tags.vocab['O']
+    default_tag_id = self.tags.vocab2id['O']
     tag_ids = [default_tag_id for _ in range(length)]
 
     e1_begin, e1_end = ent_indices[0], ent_indices[1]+1
     e2_begin, e2_end = ent_indices[2], ent_indices[3]+1
 
-    
+    rel_str, e1_is_head = self.extract_rel_from_label_text(label_id)
 
+    tags_str = self.build_tag(e1_begin, e1_end, rel_str, e1_is_head)
+    tag_ids[e1_begin: e1_end] = self.tags.encode(tags_str)
 
+    tags_str = self.build_tag(e2_begin, e2_end, rel_str, not e1_is_head)
+    tag_ids[e2_begin: e2_end] = self.tags.encode(tags_str)
+
+    return tag_ids
 
 
 class SemEvalCleanedTextData(dataset.TextDataset):
  
   def __init__(self, data_dir, train_file, test_file):
+    self.tag_converter = None
     super().__init__(data_dir, train_file=train_file, test_file=test_file)
 
   def token_generator(self, file):
@@ -56,6 +88,8 @@ class SemEvalCleanedTextData(dataset.TextDataset):
           length.append(n)
     return length
 
+  def set_tag_converter(self, tag_converter):
+    self.tag_converter = tag_converter
 
   def example_generator(self, file):
     with open(file) as f:
@@ -66,55 +100,40 @@ class SemEvalCleanedTextData(dataset.TextDataset):
         sent = self.vocab.encode(sent)
         length = len(sent)
 
-        label = int(words[0])
+        label_id = int(words[0])
 
         e1_first, e1_last  = (int(words[1]), int(words[2]))
         e2_first, e2_last  = (int(words[3]), int(words[4]))
-        ent_pos = [e1_first, e1_last, e2_first, e2_last]
+        ent_indices = [e1_first, e1_last, e2_first, e2_last]
 
-        pos1 = dataset.position_feature(e1_first, e1_last, length)
-        pos2 = dataset.position_feature(e2_first, e2_last, length)
+        labels = self.tag_converter.convert_to_tag(label_id, ent_indices, length)
 
         yield {
-          'label': [label], 'length': [length], 'ent_pos': ent_pos, 
-          'sentence': sent, 'pos1': pos1, 'pos2': pos2}
+          'labels': labels, 'length': [length], 'sentence': sent}
     
 class SemEvalCleanedRecordData(dataset.RecordDataset):
 
-  def __init__(self, text_dataset, train_record_file=TRAIN_RECORD, 
-               test_record_file=TEST_RECORD):
-    super().__init__(text_dataset, 
+  def __init__(self, text_dataset, out_dir, train_record_file, test_record_file):
+    super().__init__(text_dataset, out_dir=out_dir,
       train_record_file=train_record_file, test_record_file=test_record_file)
 
   def parse_example(self, example):
     features = {
-        "label": tf.FixedLenFeature([], tf.int64),
         "length": tf.FixedLenFeature([], tf.int64),
-        "ent_pos": tf.FixedLenFeature([4], tf.int64),
         "sentence": tf.VarLenFeature(tf.int64),
-        "pos1": tf.VarLenFeature(tf.int64),
-        "pos2": tf.VarLenFeature(tf.int64),
+        "labels": tf.VarLenFeature(tf.int64)
     }
     feat_dict = tf.parse_single_example(example, features)
 
     # load from disk
-    label = feat_dict['label']
+    labels = feat_dict['labels']
     length = tf.cast(feat_dict['length'], tf.int32)
-    ent_pos = tf.cast(feat_dict['ent_pos'], tf.int32)
     sentence = tf.sparse_tensor_to_dense(feat_dict['sentence'])
-    pos1 = tf.sparse_tensor_to_dense(feat_dict['pos1'])
-    pos2 = tf.sparse_tensor_to_dense(feat_dict['pos2'])
 
-    # transformed tensor
-    # begin = tf.convert_to_tensor([ent_pos[0], ent_pos[2]])
-    # size = tf.convert_to_tensor([ent_pos[1]-ent_pos[0]+1, ent_pos[3]-ent_pos[2]+1])
-
-    return (label, length, ent_pos, 
-            sentence, pos1, pos2)
+    return length, sentence, labels
   
   def padded_shapes(self):
-    return ([], [], [4],
-            [None], [None], [None])
+    return ([], [None], [None])
 
 
 def write_results(predictions):

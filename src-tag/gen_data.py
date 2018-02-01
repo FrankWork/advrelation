@@ -1,34 +1,39 @@
 import tensorflow as tf
-from inputs import dataset, semeval_v2, nyt2010
+import config as config_lib
+from inputs import dataset, semeval_v2
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-semeval_text = semeval_v2.SemEvalCleanedTextData()
-# nyt_text = nyt2010.NYT2010CleanedTextData()
+config = config_lib.get_config()
+
+semeval_text = semeval_v2.SemEvalCleanedTextData(
+      config.semeval_dir, config.semeval_train_file, config.semeval_test_file)
 
 # length statistics
 semeval_text.length_statistics()
-# nyt_text.length_statistics()
 
 # gen vocab
-vocab_mgr = dataset.VocabMgr()
-vocab_mgr.generate_vocab(semeval_text.tokens())
+vocab = dataset.Vocab(config.out_dir, config.vocab_file)
+vocab.generate_vocab(semeval_text.tokens())
 
 # trim embedding
-vocab_mgr.trim_pretrain_embedding()
+embed = dataset.Embed(config.out_dir, config.trimmed_embed300_file, config.vocab_file)
+google_embed = dataset.Embed(config.pretrain_embed_dir, 
+                        config.google_embed300_file, config.google_words_file)
+embed.trim_pretrain_embedding(google_embed)
 
 # build SemEval record data
-semeval_text.set_vocab_mgr(vocab_mgr)
-semeval_record = semeval_v2.SemEvalCleanedRecordData(semeval_text)
+semeval_text.set_vocab(vocab)
+tag_converter = semeval_v2.TagConverter(config.semeval_dir, 
+                      config.semeval_relations_file, config.semeval_tags_file)
+semeval_text.set_tag_converter(tag_converter)
+semeval_record = semeval_v2.SemEvalCleanedRecordData(semeval_text,
+        config.out_dir, config.semeval_train_record, config.semeval_test_record)
 semeval_record.generate_data()
 
-# build nyt record data
-# nyt_text.set_vocab_mgr(vocab_mgr)
-# nyt_record = nyt2010.NYT2010CleanedRecordData(nyt_text)
-# nyt_record.generate_data()
 
-# INFO:tensorflow:(percent, quantile) [(50, 17.0), (70, 21.0), (80, 24.0), (90, 29.0), (95, 33.0), (98, 40.0), (100, 98.0)]
-# INFO:tensorflow:(percent, quantile) [(50, 39.0), (70, 47.0), (80, 53.0), (90, 62.0), (95, 71.0), (98, 84.0), (100, 9621.0)]
+# INFO:tensorflow:(percent, quantile) [(50, 18.0), (70, 22.0), (80, 25.0), 
+#                              (90, 29.0), (95, 34.0), (98, 40.0), (100, 97.0)]
+# INFO:tensorflow:generate vocab to data/generated/vocab.txt
+# INFO:tensorflow:trim embedding to data/generated/embed300.trim.npy
 # INFO:tensorflow:generate TFRecord data
-# INFO:tensorflow:generate TFRecord data
-# INFO:tensorflow:ignore 1361 examples
