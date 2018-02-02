@@ -65,14 +65,26 @@ class RNNModel(BaseModel):
     return sentence
   
   def compute_logits(self, inputs, lengths):
+    inputs = tf.transpose(inputs, [1, 0, 2]) # time_major, (time, batch, dim)
+
     with tf.variable_scope("bi-lstm-encoder"):
+      # LSTM with peephole connections, exact implement of formula 1-6
+      # tensorflow/python/ops/rnn_cell_impl.py
+      # (c_prev, m_prev) = state
+      # value = matmul([inputs, m_prev], kernel)+bias
+      # i,j,f,o = split(value, 4)
+      # c = sig(f+1+wf*c_prev)*c_prev + sig(i+wi*c_prev)*tanh(j)
+      # m = sig(o+wo*c)*tanh(c)
+
+      # c = sig(f+1)*c_prev + sig(i)*tanh(j)
+      # m = sig(o)*tanh(c)
       cell_fw = tf.contrib.rnn.LSTMCell(self.hparams.hidden_size, 
                                         use_peepholes=True, name='en_cell_fw')
       cell_bw = tf.contrib.rnn.LSTMCell(self.hparams.hidden_size, 
                                         use_peepholes=True, name='en_cell_bw')
       bi_output, bi_state = tf.nn.bidirectional_dynamic_rnn(
-                          cell_fw, cell_bw, inputs, 
-                          sequence_length=lengths, dtype=tf.float32)
+                          cell_fw, cell_bw, inputs, sequence_length=lengths, 
+                          dtype=tf.float32, time_major=True)
       en_output = tf.concat(bi_output, axis=-1)
       en_output = tf.layers.dropout(en_output, self.hparams.dropout_rate, 
                                  training=self.is_train)
@@ -83,9 +95,33 @@ class RNNModel(BaseModel):
             tf.concat([state_fw[1], state_bw[1]], axis=-1))
 
     with tf.variable_scope("lstm-decoder"):
-      cell_de = tf.contrib.rnn.LSTMCell(2*self.hparams.hidden_size, name='de_cell')
-      helper = tf.contrib.seq2seq.TrainingHelper(en_output, lengths)
+      def initial_fn():
+        finished = tf.equal(0, lengths) # all False at the initial step
+        ini_inputs = en_output[0]
+        zero_inputs = tf.zeros_like(ini_inputs)
+        initial_inputs = tf.concat([zero_inputs, ini_inputs], 1)
+        return finished, initial_inputs
+
+      def sample_fn(time, outputs, state):
+        sample_ids = tf.to_int32(tf.argmax(outputs, axis=1))
+        return sample_ids
+
+      def next_inputs_fn(time, outputs, state, sample_ids):
+        # 上一个时间节点上的输出类别，获取embedding再作为下一个时间节点的输入
+        pred_embedding = tf.nn.embedding_lookup(self.embeddings, sample_ids)
+        # 输入是h_i+o_{i-1}+c_i
+        next_input = tf.concat((pred_embedding, encoder_outputs[time]), 1)
+        elements_finished = (time >= lengths)  # this operation produces boolean tensor of [batch_size]
+        all_finished = tf.reduce_all(elements_finished)  # -> boolean scalar
+        next_inputs = tf.cond(all_finished, lambda: pad_step_embedded, lambda: next_input)
+        next_state = state
+        return elements_finished, next_inputs, next_state
+
+      # helper: feed encoder outputs to decoder
+      helper = tf.contrib.seq2seq.CustomHelper(initial_fn, sample_fn, next_inputs_fn)
+      # helper = tf.contrib.seq2seq.TrainingHelper(en_output, lengths)
       
+      cell_de = tf.contrib.rnn.LSTMCell(2*self.hparams.hidden_size, name='de_cell')
       proj_layer = tf.layers.Dense(self.hparams.num_tags, use_bias=False)
       decoder = tf.contrib.seq2seq.BasicDecoder(
                     cell_de, helper, en_state,
