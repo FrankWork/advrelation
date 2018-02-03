@@ -2,7 +2,7 @@ import tensorflow as tf
 import config as config_lib
 from inputs import dataset, semeval_v2
 
-tf.logging.set_verbosity(tf.logging.DEBUG)
+tf.logging.set_verbosity(tf.logging.INFO)
 
 config = config_lib.get_config()
 

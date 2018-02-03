@@ -80,13 +80,18 @@ class RNNModel(BaseModel):
                                  training=self.is_train)
 
       state_fw, state_bw = bi_state
-      c = tf.concat([state_fw.c, state_bw.c], axis=-1)
-      h = tf.concat([state_fw.h, state_bw.h], axis=-1)
+      # c = tf.concat([state_fw.c, state_bw.c], axis=-1)
+      # h = tf.concat([state_fw.h, state_bw.h], axis=-1)
+      c = state_fw.c + state_bw.c
+      h = state_fw.h + state_bw.h
       en_state = TagLSTMStateTuple(c, h, tf.zeros_like(c))
 
     with tf.variable_scope("lstm-decoder"):
       decode_outputs = decode(en_output, en_state, lengths, self.hparams.hidden_size)
+      decode_outputs = tf.transpose(decode_outputs, [1, 0, 2])
       logits = tf.layers.dense(decode_outputs, self.hparams.num_tags)
+      # print(logits.shape)
+      # exit()
 
     return logits
   
@@ -106,7 +111,7 @@ class RNNModel(BaseModel):
    
     # cross entropy loss
     logits = self.compute_logits(sentence, lengths)
-    loss_xent = self.compute_xentropy_loss(logits, labels, lengths)
+    loss_xent = self.compute_xentropy_loss(logits, tags, lengths)
 
     # l2 loss
     # regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -122,6 +127,7 @@ class RNNModel(BaseModel):
     self.tensors['pred'] = pred
     self.tensors['lengths'] = lengths
     self.tensors['labels'] = labels
+    self.tensors['tags'] = tags
 
     self.maybe_build_train_op()
 
@@ -132,14 +138,13 @@ class RNNModel(BaseModel):
     moving_loss, moving_acc = [], []
     for batch in range(num_batches_per_epoch):
       train_op = self.train_ops['train_loss']
-      fetches = [train_op, self.tensors['lengths'], self.tensors['labels'], 
+      fetches = [train_op, self.tensors['lengths'], self.tensors['tags'], 
                  self.tensors['pred'], self.tensors['loss']
                 ]
-      _, lengths, labels, preds, loss = session.run(fetches)
+      _, lengths, tags, preds, loss = session.run(fetches)
 
       moving_loss.append(loss)
-
-      for lab, lab_pred, length in zip(labels, preds, lengths):
+      for lab, lab_pred, length in zip(tags, preds, lengths):
         lab      = lab[:length]
         lab_pred = lab_pred[:length]
         acc = np.mean(np.equal(lab, lab_pred))
@@ -158,9 +163,9 @@ class RNNModel(BaseModel):
     correct_preds, total_correct, total_preds = 0., 0., 0.
     for batch in range(num_batches):
       fetches = [self.tensors['pred'], self.tensors['lengths'], 
-                 self.tensors['labels']]
-      preds, lengths, labels = session.run(fetches)
-      for lab, lab_pred, length in zip(labels, preds, lengths):
+                 self.tensors['tags']]
+      preds, lengths, tags = session.run(fetches)
+      for lab, lab_pred, length in zip(tags, preds, lengths):
         lab      = lab[:length]
         lab_pred = lab_pred[:length]
         acc = np.mean(np.equal(lab, lab_pred))

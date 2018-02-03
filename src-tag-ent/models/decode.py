@@ -182,14 +182,16 @@ class TagLSTMCell(tf.contrib.rnn.BasicLSTMCell):
 
 
 def decode(inputs, state, lengths, hidden_size):
-  inputs = tf.transpose(inputs, [1, 0, 2]) # (max_len, batch, dim)
+  # inputs = tf.transpose(inputs, [1, 0, 2]) # (max_len, batch, dim)
+  lengths = tf.cast(lengths, tf.int32)
 
   cell = TagLSTMCell(hidden_size, name='decode_cell')
   # if state is None:
   #   state = cell.zero_state(batch_size, tf.float32)
 
   def initial_fn():
-    finished = tf.equal(0, lengths) # all False at the initial step
+    zero = tf.constant(0, dtype=tf.int32)
+    finished = tf.equal(zero, lengths) # all False at the initial step
     ini_input = inputs[0]
     return finished, ini_input
 
@@ -199,11 +201,10 @@ def decode(inputs, state, lengths, hidden_size):
 
   def next_inputs_fn(time, outputs, state, sample_ids):
     # next_input = tf.concat((pred_embedding, encoder_outputs[time]), 1)
-    next_input = inputs[time]
-    zero_input = tf.zeros_like(next_input)
+    zero_input = tf.zeros_like(inputs[0])
     finished = tf.greater_equal(time, lengths)  # this operation produces boolean tensor of [batch_size]
     all_finished = tf.reduce_all(finished)  # -> boolean scalar
-    next_inputs = tf.cond(all_finished, lambda: zero_input, lambda: next_input)
+    next_inputs = tf.cond(all_finished, lambda: zero_input, lambda: inputs[time])
     next_state = state
     return finished, next_inputs, next_state
 
