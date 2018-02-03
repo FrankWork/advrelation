@@ -4,6 +4,7 @@ import tensorflow as tf
 # from models.adv import *
 # from models.attention import *
 from models.decode import *
+from models.focal_loss import focal_loss
 
 class BaseModel(object):
   def __init__(self, config, ini_word_embed, batched_data, is_train):
@@ -51,7 +52,8 @@ class BaseModel(object):
       gradients, variables = zip(*optimizer.compute_gradients(loss))
       
       if max_norm is not None:
-        gradients, _ = tf.clip_by_global_norm(gradients, max_norm)
+        gradients, norm = tf.clip_by_global_norm(gradients, max_norm)
+        self.tensors['norm'] = norm
       train_op = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
       return train_op
 
@@ -88,20 +90,21 @@ class RNNModel(BaseModel):
 
     with tf.variable_scope("lstm-decoder"):
       decode_outputs = decode(en_output, en_state, lengths, self.hparams.hidden_size)
-      decode_outputs = tf.transpose(decode_outputs, [1, 0, 2])
       logits = tf.layers.dense(decode_outputs, self.hparams.num_tags)
-      # print(logits.shape)
-      # exit()
 
     return logits
   
   def compute_xentropy_loss(self, logits, labels, lengths):
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
-      losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    logits=logits, labels=labels)
-      mask = tf.sequence_mask(lengths)
-      losses = tf.boolean_mask(losses, mask)
+      onehot_labels = tf.one_hot(labels, self.hparams.num_tags)
+      cls_preds = tf.nn.softmax(logits)
+      weights = tf.sequence_mask(lengths, dtype=logits.dtype)
+      
+      losses = focal_loss(cls_preds, onehot_labels)
+      # losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+      #               logits=logits, labels=labels)
+      # losses = losses * weights
 
     return tf.reduce_mean(losses)
   
@@ -120,8 +123,6 @@ class RNNModel(BaseModel):
     # prediction
     with tf.name_scope("prediction"):
       pred = tf.argmax(logits, axis=-1)
-
-    self.tensors['logits'] = logits
 
     self.tensors['loss'] = loss_xent #+ loss_adv + loss_l2
     self.tensors['pred'] = pred
@@ -142,7 +143,7 @@ class RNNModel(BaseModel):
                  self.tensors['pred'], self.tensors['loss']
                 ]
       _, lengths, tags, preds, loss = session.run(fetches)
-
+      
       moving_loss.append(loss)
       for lab, lab_pred, length in zip(tags, preds, lengths):
         lab      = lab[:length]
@@ -159,18 +160,22 @@ class RNNModel(BaseModel):
     session.run(test_ds_iter.initializer)
 
     accs = []
-    pred_list = []
+    pred_result = []
+    tags_result = []
     correct_preds, total_correct, total_preds = 0., 0., 0.
     for batch in range(num_batches):
       fetches = [self.tensors['pred'], self.tensors['lengths'], 
                  self.tensors['tags']]
       preds, lengths, tags = session.run(fetches)
+      # print(preds.shape, lengths.shape, tags.shape)
       for lab, lab_pred, length in zip(tags, preds, lengths):
+        # print(lab.shape, lab_pred.shape, length)
         lab      = lab[:length]
         lab_pred = lab_pred[:length]
         acc = np.mean(np.equal(lab, lab_pred))
         accs.append(acc)
-        pred_list.append(lab_pred)
+        pred_result.append(lab_pred)
+        tags_result.append(lab)
 
         lab_chunks      = set(get_chunks(lab, vocab_tags))
         lab_pred_chunks = set(get_chunks(lab_pred, vocab_tags))
@@ -185,7 +190,7 @@ class RNNModel(BaseModel):
     acc = np.mean(accs)
 
     if return_pred:
-      return pred_list
+      return pred_result, tags_result
 
     return 100*acc, 100*f1
 

@@ -202,7 +202,7 @@ def decode(inputs, state, lengths, hidden_size):
   def next_inputs_fn(time, outputs, state, sample_ids):
     # next_input = tf.concat((pred_embedding, encoder_outputs[time]), 1)
     zero_input = tf.zeros_like(inputs[0])
-    finished = tf.greater_equal(time, lengths)  # this operation produces boolean tensor of [batch_size]
+    finished = tf.greater_equal(time, lengths-1)  # this operation produces boolean tensor of [batch_size]
     all_finished = tf.reduce_all(finished)  # -> boolean scalar
     next_inputs = tf.cond(all_finished, lambda: zero_input, lambda: inputs[time])
     next_state = state

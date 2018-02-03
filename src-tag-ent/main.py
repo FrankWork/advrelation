@@ -12,7 +12,7 @@ import config as config_lib
 # np.random.seed(0)
 
 flags = tf.app.flags
-flags.DEFINE_boolean('is_test', False, 'set True to test')
+flags.DEFINE_boolean('test', False, 'set True to test')
 FLAGS = tf.app.flags.FLAGS
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -51,18 +51,19 @@ def train_semeval(config, session, m_train, m_valid, test_iter, vocab_tags):
 def test(session, m_valid, test_iter, vocab_tags):
   
   m_valid.restore(session)
-  tags = m_valid.evaluate(session, test_iter, 28, vocab_tags.vocab2id, return_pred=True)
+  preds, tags = m_valid.evaluate(session, test_iter, 28, vocab_tags.vocab2id, return_pred=True)
+  preds = [vocab_tags.decode(x) for x in preds]
   tags = [vocab_tags.decode(x) for x in tags]
   # print(len(tags))
   # print(tags[0])
 
-  for tag_list in tags:
-    tag_list = [x for x in tag_list if x!='O']
-    print(' '.join(tag_list))
-
-  # print(vocab_tags.decode(tags[0]))
-
-  # print(vocab_tags.vocab)
+  with open('tags.txt', 'w') as f:
+    for arr in tags:
+      f.write(' '.join(arr)+'\n')
+  with open('preds.txt', 'w') as f:
+    for arr in preds:
+      f.write(' '.join(arr)+'\n')
+  # vimdiff tags.txt preds.txt
 
   # semeval_v2.write_results(pred_all)
 
@@ -100,7 +101,17 @@ def main(_):
       sess.run(init_op)
       print('='*80)
 
-      if FLAGS.is_test:
+      # for batch in range(80):
+      #   (labels, lengths, sentence, tags) = sess.run(train_data)
+      #   print(sentence.shape, tags.shape)
+      
+      # sess.run(test_iter.initializer)
+      # for batch in range(28):
+      #   (labels, lengths, sentence, tags) = sess.run(test_data)
+      #   print(sentence.shape, tags.shape)
+      # exit()
+
+      if FLAGS.test:
         test(sess, m_valid, test_iter, vocab_tags)
       else:
         train_semeval(config, sess, m_train, m_valid, test_iter, vocab_tags)
