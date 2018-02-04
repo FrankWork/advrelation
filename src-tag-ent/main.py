@@ -18,12 +18,13 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 
 def train_semeval(config, session, m_train, m_valid, test_iter, vocab_tags):
-  best_f1, best_epoch = 0., 0
+  best_acc, best_epoch = 0., 0
   start_time = time.time()
   orig_begin_time = start_time
   
   for epoch in range(config.hparams.num_epochs):
-    loss, acc = m_train.train_epoch(session, 80)
+    loss, tags_acc, rel_acc = m_train.train_epoch(session, 80)
+    train_msg = 'train loss %.2f tags_acc %.2f rel_acc %.2f' % (loss, tags_acc, rel_acc)
 
     # epoch duration
     now = time.time()
@@ -31,20 +32,21 @@ def train_semeval(config, session, m_train, m_valid, test_iter, vocab_tags):
     start_time = now
 
     # valid accuracy
-    valid_acc, f1 = m_valid.evaluate(session, test_iter, 28, vocab_tags.vocab2id)
+    tags_acc, f1, rel_acc = m_valid.evaluate(session, test_iter, 28, vocab_tags.vocab2id)
+    test_msg = 'test tag_acc %.2f f1 %.2f rel_acc %.2f' % (tags_acc, f1, rel_acc)
 
-    if best_f1 < f1:
-      best_f1 = f1
+    if best_acc < rel_acc:
+      best_acc = rel_acc
       best_epoch = epoch
       m_train.save(session, epoch)
     
-    print("Epoch %d train %.2f %.2f valid %.2f %.2f time %.2f" % 
-             (epoch, loss, acc, valid_acc, f1, duration))
+    print("Epoch %d %s %s time %.2f" % 
+             (epoch, train_msg, test_msg, duration))
     sys.stdout.flush()
   
   duration = time.time() - orig_begin_time
   duration /= 3600
-  print('Done training, best_epoch: %d, best_f1: %.4f' % (best_epoch, best_f1))
+  print('Done training, best_epoch: %d, best_acc: %.4f' % (best_epoch, best_acc))
   print('duration: %.2f hours' % duration)
   sys.stdout.flush()
 
@@ -96,19 +98,22 @@ def main(_):
 
     for tensor in tf.trainable_variables():
       tf.logging.info(tensor.op.name)
-        
+    
     with tf.Session(config=sess_config) as sess:
       sess.run(init_op)
       print('='*80)
 
-      # for batch in range(80):
-      #   (labels, lengths, sentence, tags) = sess.run(train_data)
-      #   print(sentence.shape, tags.shape)
-      
-      # sess.run(test_iter.initializer)
-      # for batch in range(28):
-      #   (labels, lengths, sentence, tags) = sess.run(test_data)
-      #   print(sentence.shape, tags.shape)
+      # for batch in range(3):
+      #   # (labels, lengths, sentence, tags) = sess.run(train_data)
+      #   # print(sentence.shape, tags.shape)
+      #   l, w = sess.run([onehot_tags, weights])
+      #   print(l.shape, w.shape)
+      #   print(w)
+
+      # # sess.run(test_iter.initializer)
+      # # for batch in range(28):
+      # #   (labels, lengths, sentence, tags) = sess.run(test_data)
+      # #   print(sentence.shape, tags.shape)
       # exit()
 
       if FLAGS.test:

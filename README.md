@@ -7,7 +7,8 @@
 - attention context
 - adversarial
 - residual
-- Subword token | char level
+- ner
+- focal loss
 
 ## fastText
 

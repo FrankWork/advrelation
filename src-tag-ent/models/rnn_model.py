@@ -90,31 +90,49 @@ class RNNModel(BaseModel):
 
     with tf.variable_scope("lstm-decoder"):
       decode_outputs = decode(en_output, en_state, lengths, self.hparams.hidden_size)
-      logits = tf.layers.dense(decode_outputs, self.hparams.num_tags)
+    
+    with tf.variable_scope("output"):
+      logits_tag = tf.layers.dense(decode_outputs, self.hparams.num_tags)
+      r = self.attention(tf.transpose(en_output, [1, 0, 2]), 'att')
+      logits_rel = tf.layers.dense(r, self.hparams.num_classes)
 
-    return logits
+    return logits_tag, logits_rel
   
-  def compute_xentropy_loss(self, logits, labels, lengths):
+  def attention(self, inputs, name, reuse=None):
+    H = inputs
+    hidden_size = inputs.shape.as_list()[-1]
+    with tf.variable_scope(name, reuse=reuse):
+        M = tf.nn.tanh(H) # b,n,d
+        w = tf.get_variable('w-att',[1, hidden_size])
+        batch_size = tf.shape(H)[0]
+        alpha = tf.matmul(tf.tile(tf.expand_dims(w, 0), [batch_size, 1, 1]),
+                        M, transpose_b=True)
+        alpha = tf.nn.softmax(alpha) # b,1,n
+        r = tf.matmul(alpha, H) # b, 1, d
+        return tf.squeeze(r, axis=1)
+
+  def compute_xentropy_loss(self, logits_tag, logits_rel, labels, tags, lengths):
     # Calculate Mean cross-entropy loss
     with tf.name_scope("loss"):
-      onehot_labels = tf.one_hot(labels, self.hparams.num_tags)
-      cls_preds = tf.nn.softmax(logits)
-      weights = tf.sequence_mask(lengths, dtype=logits.dtype)
-      
-      losses = focal_loss(cls_preds, onehot_labels)
-      # losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-      #               logits=logits, labels=labels)
-      # losses = losses * weights
+      # onehot_labels = tf.one_hot(labels, self.hparams.num_tags)
 
-    return tf.reduce_mean(losses)
+      entropy_tags = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    logits=logits_tag, labels=tags)
+      weights = tf.sequence_mask(lengths, dtype=tf.float32)
+      entropy_tags = entropy_tags * weights
+
+      entropy_label = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    logits=logits_rel, labels=labels)
+
+    return tf.reduce_mean(entropy_label) #tf.reduce_mean(entropy_tags) + 
   
   def build_graph(self, data):
     (labels, lengths, sentence, tags) = data
     sentence = self.embed_layer(sentence)
    
     # cross entropy loss
-    logits = self.compute_logits(sentence, lengths)
-    loss_xent = self.compute_xentropy_loss(logits, tags, lengths)
+    logits_tag, logits_rel = self.compute_logits(sentence, lengths)
+    loss_xent = self.compute_xentropy_loss(logits_tag, logits_rel, labels, tags, lengths)
 
     # l2 loss
     # regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -122,10 +140,15 @@ class RNNModel(BaseModel):
     
     # prediction
     with tf.name_scope("prediction"):
-      pred = tf.argmax(logits, axis=-1)
+      pred_tags = tf.argmax(logits_tag, axis=-1)
+      pred_rel = tf.argmax(logits_rel, axis=-1)
+      acc = tf.cast(tf.equal(pred_rel, labels), tf.float32)
+      acc = tf.reduce_mean(acc)
 
     self.tensors['loss'] = loss_xent #+ loss_adv + loss_l2
-    self.tensors['pred'] = pred
+    self.tensors['pred_tags'] = pred_tags
+    self.tensors['pred_rel'] = pred_rel
+    self.tensors['rel_acc'] = acc
     self.tensors['lengths'] = lengths
     self.tensors['labels'] = labels
     self.tensors['tags'] = tags
@@ -136,22 +159,25 @@ class RNNModel(BaseModel):
     if not self.is_train:
       return
 
-    moving_loss, moving_acc = [], []
+    moving_loss, moving_tag_acc, moving_rel_acc = [], [], []
     for batch in range(num_batches_per_epoch):
       train_op = self.train_ops['train_loss']
       fetches = [train_op, self.tensors['lengths'], self.tensors['tags'], 
-                 self.tensors['pred'], self.tensors['loss']
+          self.tensors['pred_tags'], self.tensors['rel_acc'],
+          self.tensors['loss']
                 ]
-      _, lengths, tags, preds, loss = session.run(fetches)
+      _, lengths, tags, pred_tags, rel_acc, loss = session.run(fetches)
       
       moving_loss.append(loss)
-      for lab, lab_pred, length in zip(tags, preds, lengths):
+      for lab, lab_pred, length in zip(tags, pred_tags, lengths):
         lab      = lab[:length]
         lab_pred = lab_pred[:length]
         acc = np.mean(np.equal(lab, lab_pred))
-        moving_acc.append(acc)
+        moving_tag_acc.append(acc)
+      
+      moving_rel_acc.append(rel_acc)
     
-    return np.mean(moving_loss), np.mean(moving_acc)*100
+    return np.mean(moving_loss), np.mean(moving_tag_acc)*100, np.mean(moving_rel_acc)*100
 
   def evaluate(self, session, test_ds_iter, num_batches, vocab_tags, return_pred=False):
     if self.is_train:
@@ -159,23 +185,23 @@ class RNNModel(BaseModel):
 
     session.run(test_ds_iter.initializer)
 
-    accs = []
+    tags_acc = []
+    rel_accs = []
     pred_result = []
     tags_result = []
     correct_preds, total_correct, total_preds = 0., 0., 0.
     for batch in range(num_batches):
-      fetches = [self.tensors['pred'], self.tensors['lengths'], 
-                 self.tensors['tags']]
-      preds, lengths, tags = session.run(fetches)
-      # print(preds.shape, lengths.shape, tags.shape)
+      fetches = [self.tensors['pred_tags'], self.tensors['lengths'], 
+                 self.tensors['tags'], self.tensors['rel_acc']]
+      preds, lengths, tags, rel_acc = session.run(fetches)
       for lab, lab_pred, length in zip(tags, preds, lengths):
-        # print(lab.shape, lab_pred.shape, length)
         lab      = lab[:length]
         lab_pred = lab_pred[:length]
         acc = np.mean(np.equal(lab, lab_pred))
-        accs.append(acc)
+        tags_acc.append(acc)
         pred_result.append(lab_pred)
         tags_result.append(lab)
+        rel_accs.append(rel_acc)
 
         lab_chunks      = set(get_chunks(lab, vocab_tags))
         lab_pred_chunks = set(get_chunks(lab_pred, vocab_tags))
@@ -187,12 +213,13 @@ class RNNModel(BaseModel):
     p   = correct_preds / total_preds if correct_preds > 0 else 0
     r   = correct_preds / total_correct if correct_preds > 0 else 0
     f1  = 2 * p * r / (p + r) if correct_preds > 0 else 0
-    acc = np.mean(accs)
+    tags_acc = np.mean(tags_acc)
+    rel_accs = np.mean(rel_accs)
 
     if return_pred:
       return pred_result, tags_result
 
-    return 100*acc, 100*f1
+    return 100*tags_acc, 100*f1, 100*rel_accs
 
   def maybe_build_train_op(self):
     if not self.is_train:
