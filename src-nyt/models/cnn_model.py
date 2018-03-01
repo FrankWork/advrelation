@@ -1,3 +1,5 @@
+import os
+import numpy as np
 import tensorflow as tf
 from models.adv import *
 from models.attention import *
@@ -12,7 +14,11 @@ class BaseModel(object):
     # embedding initialization
     self.word_embed = tf.get_variable('word_embed', initializer= ini_word_embed,
                       dtype=tf.float32, trainable=self.hparams.tune_word_embed)
-    
+    pos_shape = [self.hparams.pos_num, self.hparams.pos_dim]  
+    self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
+    self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
+    self.embed_dim = self.hparams.word_embed_size + 2*self.hparams.pos_dim
+
     self.tensors = dict()
 
     initializer = tf.keras.initializers.he_normal()
@@ -71,61 +77,6 @@ def conv_block_v2(inputs, kernel_size, num_filters, name, training,
       conv_out = conv_out + shortcut
     return conv_out
 
-def slice_batch(inputs, begin, size, dtype=tf.float32):
-  '''
-  Args
-    inputs: [batch, length, dim]
-    begin: [batch]
-    size: [batch]
-  '''
-  max_size = tf.reduce_max(size)
-  batch_idx = tf.range(tf.shape(inputs)[0])
-
-  # [batch, 1]
-  begin = tf.expand_dims(begin, axis=-1)
-  size = tf.expand_dims(size, axis=-1)
-
-  # [batch, 2]
-  begin = tf.concat([begin, tf.zeros_like(begin)], axis=-1)
-  size = tf.concat([size, -1*tf.ones_like(size)], axis=-1)
-
-  def map_fn(idx):
-    slice = tf.slice(inputs[idx], begin[idx], size[idx])
-    pad = tf.pad(slice, [[0, max_size-size[idx][0]], [0, 0]])
-    return pad
-
-  return tf.map_fn(map_fn, batch_idx, dtype=dtype)
-
-def slice_batch_n(inputs, begin_n, size_n, dtype=tf.float32):
-  '''
-  Args
-    inputs: [batch, length, dim]
-    begin_n: a list of tensors of shape [batch]
-    size_n: a list of tensors of shape [batch]
-  '''
-  size_total = tf.add_n(size_n)
-  max_size = tf.reduce_max(size_total)
-  batch_idx = tf.range(tf.shape(inputs)[0])
-
-  # [batch, 1]
-  begin_n = [tf.expand_dims(begin, axis=-1) for begin in begin_n]
-  size_n = [tf.expand_dims(size, axis=-1) for size in size_n]
-
-  # [batch, 2]
-  begin_n = [tf.concat([begin, tf.zeros_like(begin)], axis=-1) for begin in begin_n]
-  size_n = [tf.concat([size, -1*tf.ones_like(size)], axis=-1) for size in size_n]
-
-  def map_fn(idx):
-    slice_n = []
-    for begin, size in zip(begin_n, size_n):
-      slice = tf.slice(inputs[idx], begin[idx], size[idx])
-      slice_n.append(slice)
-    slice_n = tf.concat(slice_n, axis=0)
-    pad = tf.pad(slice_n, [[0, max_size-size_total[idx]], [0, 0]])
-    return pad
-
-  return tf.map_fn(map_fn, batch_idx, dtype=dtype)
-
 class CNNModel(BaseModel):
 
   def bottom(self, data):
@@ -136,14 +87,13 @@ class CNNModel(BaseModel):
     pos1 = tf.nn.embedding_lookup(self.pos1_embed, pos1)
     pos2 = tf.nn.embedding_lookup(self.pos2_embed, pos2)
 
-    sentence = tf.layers.dropout(sentence, FLAGS.dropout_rate, training=self.is_train)
+    sentence = tf.layers.dropout(sentence, self.hparams.dropout_rate, training=self.is_train)
 
     return labels, length, ent_pos, sentence, pos1, pos2
   
   def conv_shallow(self, inputs, name='conv_block'):
     conv_out = conv_block_v2(inputs, self.hparams.kernel_size, 
                   self.hparams.num_filters, name,training=self.is_train, 
-                  initializer=self.he_normal, batch_norm=False,
                   reuse=tf.AUTO_REUSE)
     max_len = self.hparams.max_len
     pool_out = tf.layers.max_pooling1d(conv_out, max_len, max_len, padding='same')
@@ -215,7 +165,7 @@ class CNNModel(BaseModel):
 
     # # adv loss
     adv_sentence = adv_example(sentence, loss_xent)
-    adv_logits = self.compute_logits(sentence, length, ent_pos, pos1, pos2)
+    adv_logits = self.compute_logits(adv_sentence, length, ent_pos, pos1, pos2)
     loss_adv = self.compute_xentropy_loss(adv_logits, labels)
 
     # # vadv loss
@@ -236,10 +186,12 @@ class CNNModel(BaseModel):
       acc = tf.reduce_mean(acc)
 
     self.tensors['acc'] = acc
-    self.tensors['loss'] = loss_xent + loss_adv + loss_l2 #+ loss_vadv
+    self.tensors['loss'] = loss_xent + loss_l2 # + loss_adv + loss_vadv
     self.tensors['pred'] = pred
 
-  def build_train_op(self):
+    self.maybe_build_train_op()
+
+  def maybe_build_train_op(self):
     if not self.is_train:
       return
 

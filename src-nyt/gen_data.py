@@ -20,13 +20,13 @@ vocab.generate_vocab(semeval_text.tokens())
 nyt_vocab = dataset.Vocab()
 nyt_vocab.generate_vocab(nyt_text.tokens(), min_vocab_freq=2)
 
-vocab.union(nyt_vocab)
+# vocab.union(nyt_vocab)
 
 # # trim embedding
-# embed = dataset.Embed(config.out_dir, config.trimmed_embed300_file, config.vocab_file)
-# google_embed = dataset.Embed(config.pretrain_embed_dir, 
-#                         config.google_embed300_file, config.google_words_file)
-# embed.trim_pretrain_embedding(google_embed)
+embed = dataset.Embed(config.out_dir, config.trimmed_embed300_file, config.vocab_file)
+google_embed = dataset.Embed(config.pretrain_embed_dir, 
+                        config.google_embed300_file, config.google_words_file)
+embed.trim_pretrain_embedding(google_embed)
 
 # build SemEval record data
 semeval_text.set_vocab(vocab)
@@ -35,8 +35,8 @@ nyt_text.set_vocab(vocab)
 tf.logging.info('generate TFRecord data')
 record_data = rc_dataset.RCRecordData(config.out_dir, 
       config.train_record, config.semeval_test_record)
-record_data.generate_train_records([semeval_text.train_examples(), 
-                                    nyt_text.train_examples()])
+record_data.generate_train_records([semeval_text.train_examples()])#, 
+                                    #nyt_text.train_examples()])
 record_data.generate_test_records([semeval_text.test_examples()])
 
 

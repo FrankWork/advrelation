@@ -34,7 +34,7 @@ def write_results(predictions, label_file, relation_file):
       id2relation.append(rel)
   
   start_no = 8001
-  with open(relation_file), 'w') as f:
+  with open(relation_file, 'w') as f:
     for idx, id in enumerate(predictions):
       if idx < 2717:
         rel = id2relation[id]

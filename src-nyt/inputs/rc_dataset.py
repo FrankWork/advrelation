@@ -96,6 +96,9 @@ class NYTTextData(RCTextData):
         words = line.strip().split(' ')
         
         sent = words[5:]
+        if len(sent) > 97:
+          continue
+          
         tf.logging.debug(sent)
         sent = self.vocab.encode(sent)
         length = len(sent)

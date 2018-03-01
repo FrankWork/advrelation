@@ -84,7 +84,7 @@ def main(_):
       sess.run(init_op)
       print('='*80)
 
-      if FLAGS.is_test:
+      if FLAGS.test:
         test(config, sess, m_valid, test_iter)
       else:
         train_semeval(config, sess, m_train, m_valid, test_iter)
