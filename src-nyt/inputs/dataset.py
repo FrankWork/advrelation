@@ -6,137 +6,55 @@ from collections import defaultdict
 import numpy as np
 import tensorflow as tf
 
-PRETRAIN_DIR = "data/pretrain"
-OUT_DIR = "data/generated"
+class Vocab(object):
+  def __init__(self, data_dir=None, vocab_file=None, vocab_freq_file=None):
 
-GOOGLE_EMBED300_FILE = "embed300.google.npy"
-GOOGLE_WORDS_FILE = "google_words.lst"
-TRIMMED_EMBED300_FILE = "embed300.trim.npy"
-
-VOCAB_SIZE = None#2**13 # 8k, 22k
-VOCAB_FILE = "vocab.txt"
-
-class VocabMgr(object):
-  def __init__(self, out_dir=OUT_DIR, vocab_file=VOCAB_FILE, 
-                vocab_freq_file=None, max_vocab_size=None, min_vocab_freq=None):
-    self.out_dir = out_dir
-    self.vocab_file = os.path.join(out_dir, vocab_file)
-    if vocab_freq_file:
-      self.vocab_freq_file = os.path.join(out_dir, vocab_freq_file)
-    else:
-      self.vocab_freq_file = None
-    self.max_vocab_size = max_vocab_size
-    self.min_vocab_freq = min_vocab_freq
     self.pad_token = '<PAD>'
     self.pad_id = 0
+    self.unk_token = '<UNK>'
+    self.unk_id = 1
 
     self._vocab = None
     self._vocab2id = None
-  
-  def _load_vocab_from_file(self, vocab_file):
+
+    
+    if vocab_file:
+      self.vocab_file = os.path.join(data_dir, vocab_file)
+    else:
+      self.vocab_file = None
+    
+    if vocab_freq_file:
+      self.vocab_freq_file = os.path.join(data_dir, vocab_freq_file)
+    else:
+      self.vocab_freq_file = None
+    
+  def load_vocab(self, vocab_file):
     vocab = []
     with open(vocab_file) as f:
       for line in f:
-        w = line.strip()
-        vocab.append(w)
+        token = line.strip()
+        vocab.append(token)
     return vocab
-
-  def _build_vocab2id(self, vocab):
+  
+  def build_vocab2id_dict(self, vocab):
     vocab2id = {}
     for id, token in enumerate(vocab):
       vocab2id[token] = id
     return vocab2id
-
+  
   @property
   def vocab(self):
     if self._vocab is None:
-      self._vocab = self._load_vocab_from_file(self.vocab_file)
+      self._vocab = self.load_vocab(self.vocab_file)
     return self._vocab
 
   @property
   def vocab2id(self):
     if self._vocab2id is None:
-      self._vocab2id = self._build_vocab2id(self.vocab)
+      self._vocab2id = self.build_vocab2id_dict(self.vocab)
     return self._vocab2id
 
-  def _generate_vocab_inner(self, token_generator):
-    vocab_freqs = defaultdict(int)
-
-    for token in token_generator:
-      vocab_freqs[token] += 1
-  
-    # Filter out low-occurring terms
-    if self.min_vocab_freq is not None:
-      vocab_freqs = dict((term, freq) for term, freq in vocab_freqs.items()
-                        if vocab_freqs[term] > self.min_vocab_freq)
-    else:
-      vocab_freqs = dict((term, freq) for term, freq in vocab_freqs.items())
-
-    # Sort by frequency
-    ordered_vocab_freqs = sorted(
-        vocab_freqs.items(), key=lambda item: item[1], reverse=True)
-
-    # Limit vocab size
-    if self.max_vocab_size is not None:
-      ordered_vocab_freqs = ordered_vocab_freqs[:self.max_vocab_size]
-
-    return ordered_vocab_freqs
-
-  def generate_vocab(self, token_generator):
-    tf.logging.info('generate vocab to %s' % self.vocab_file)
-    
-    ordered_vocab_freqs = self._generate_vocab_inner(token_generator)
-
-    freq_f = None
-    if self.vocab_freq_file:
-      freq_f = open(self.vocab_freq_file, 'w')
-
-    with open(self.vocab_file, 'w') as vocab_f:
-      vocab_f.write('%s\n'% self.pad_token)
-      if freq_f:
-        freq_f.write('%d\n' % 10**6)
-      for token, freq in ordered_vocab_freqs:
-        vocab_f.write('%s\n'% token)
-        if freq_f:
-          freq_f.write('%d\n' % freq)
-    
-    if freq_f:
-      freq_f.close()
-
-  def trim_pretrain_embedding(self, trimed_embed_file=TRIMMED_EMBED300_FILE, 
-                              pretrain_dir=PRETRAIN_DIR, 
-                              pretrain_embed_file=GOOGLE_EMBED300_FILE, 
-                              pretrain_vocab_file=GOOGLE_WORDS_FILE):
-    '''trim unnecessary words from original pre-trained word embedding'''
-    pretrain_embed_file = os.path.join(pretrain_dir, pretrain_embed_file)
-    pretrain_vocab_file = os.path.join(pretrain_dir, pretrain_vocab_file)
-    trimed_embed_file = os.path.join(self.out_dir, trimed_embed_file)
-
-    tf.logging.info('trim embedding to %s'%trimed_embed_file)
-
-    pretrain_embed    = np.load(pretrain_embed_file)
-    pretrain_vocab = self._load_vocab_from_file(pretrain_vocab_file)
-    pretrain_words2id = self._build_vocab2id(pretrain_vocab)
-
-    word_embed=[]
-    word_dim = pretrain_embed.shape[1]
-
-    for w in self.vocab:
-      if w in pretrain_words2id:
-        id = pretrain_words2id[w]
-        word_embed.append(pretrain_embed[id])
-      else:
-        vec = np.random.normal(0,0.1,[word_dim])
-        word_embed.append(vec)
-    word_embed[self.pad_id] = np.zeros([word_dim])
-
-    word_embed = np.asarray(word_embed)
-    np.save(trimed_embed_file, word_embed.astype(np.float32))
-
-  def load_embedding(self, embed_file=TRIMMED_EMBED300_FILE):
-    return np.load(os.path.join(OUT_DIR, embed_file))
-
-  def map_token_to_id(self, tokens):
+  def encode(self, tokens):
     '''convert a list of tokens to a list of ids
     Args:
       tokens: list, [token0, token1, .. ]
@@ -146,7 +64,109 @@ class VocabMgr(object):
       if token in self.vocab2id:
         tok_id = self.vocab2id[token]
         ids.append(tok_id)
+      elif self.unk_token is not None:
+        ids.append(self.unk_id)
+
     return ids
+
+  def decode(self, ids):
+    tokens = []
+    for id in ids:
+      tok = self.vocab[id]
+      tokens.append(tok)
+    return tokens
+  
+  def _count_tokens(self, token_generator, max_vocab_size, min_vocab_freq):
+    vocab_freqs = defaultdict(int)
+
+    for token in token_generator:
+      vocab_freqs[token] += 1
+  
+    # Filter out low-occurring terms
+    if min_vocab_freq is not None:
+      vocab_freqs = dict((term, freq) for term, freq in vocab_freqs.items()
+                        if vocab_freqs[term] > min_vocab_freq)
+    else:
+      vocab_freqs = dict((term, freq) for term, freq in vocab_freqs.items())
+
+    # Sort by frequency
+    ordered_vocab_freqs = sorted(
+        vocab_freqs.items(), key=lambda item: item[1], reverse=True)
+
+    # Limit vocab size
+    if max_vocab_size is not None:
+      ordered_vocab_freqs = ordered_vocab_freqs[:max_vocab_size]
+
+    return ordered_vocab_freqs
+
+  def save(self, file, tokens):
+    with open(file, 'w') as f:
+      for tok in tokens:
+        f.write('%s\n' % tok)
+  
+  def generate_vocab(self, token_generator, 
+                     max_vocab_size=None, min_vocab_freq=None):
+    tf.logging.info('generate vocab to %s' % self.vocab_file)
+    ordered_vocab_freqs = self._count_tokens(token_generator, 
+                                  max_vocab_size, min_vocab_freq)
+
+    tokens = [self.pad_token, self.unk_token]
+    tokens.extend([tok for tok, _ in ordered_vocab_freqs])
+    self._vocab = tokens
+
+    if self.vocab_file is not None:
+      self.save(self.vocab_file, self._vocab)
+    
+    
+
+    freqs = [10**6, 10]
+    freqs.extend([freq for _, freq in ordered_vocab_freqs])
+    if self.vocab_freq_file is not None:
+      self.save(self.vocab_freq_file, freqs)
+
+  def union(self, other_vocab):
+    for tok in other_vocab.vocab:
+      if tok not in self.vocab2id:
+        self._vocab.append(tok)
+    
+    self._vocab2id = self.build_vocab2id_dict(self.vocab)
+    
+    if self.vocab_file is not None:
+      self.save(self.vocab_file, self._vocab)
+
+class Embed(object):
+  def __init__(self, embed_dir, embed_file, vocab_file):
+    self.embed_file = os.path.join(embed_dir, embed_file)
+    self.vocab = Vocab(embed_dir, vocab_file)
+  
+  def load_embedding(self):
+    if self.embed_file.endswith('.npz'):
+      tensor_dict = np.load(self.embed_file)
+      return tensor_dict['word_embed']
+
+    return np.load(self.embed_file) # .npy file
+    
+  def trim_pretrain_embedding(self, src_embed_obj):
+    '''trim unnecessary words from original pre-trained word embedding'''
+    tf.logging.info('trim embedding to %s'%self.embed_file)
+
+    src_embed = src_embed_obj.load_embedding()
+    src_words2id = src_embed_obj.vocab.vocab2id
+
+    word_embed=[]
+    word_dim = src_embed.shape[1]
+
+    for w in self.vocab.vocab:
+      if w in src_words2id:
+        id = src_words2id[w]
+        word_embed.append(src_embed[id])
+      else:
+        vec = np.random.normal(0,0.1,[word_dim])
+        word_embed.append(vec)
+    word_embed[self.vocab.pad_id] = np.zeros([word_dim])
+
+    word_embed = np.asarray(word_embed)
+    np.save(self.embed_file, word_embed.astype(np.float32))
 
 class Dataset(object):
 
@@ -160,7 +180,7 @@ class Dataset(object):
 
     # p7 = np.percentile(length, 70)
     # Probability{length < p7} = 0.7
-    percent = [50, 70, 80, 90, 95, 98, 100]
+    percent = [50, 70, 80, 90, 95, 98, 99, 100]
     quantile = [np.percentile(length, p) for p in percent]
     
     tf.logging.info('(percent, quantile) %s' % str(list(zip(percent, quantile))))
@@ -180,15 +200,14 @@ class TextDataset(Dataset):
     if self.unsup_file:
       self.unsup_file = os.path.join(data_dir, self.unsup_file)
 
-  def set_vocab_mgr(self, vocab_mgr):
-    self.vocab_mgr = vocab_mgr
+  def set_vocab(self, vocab):
+    self.vocab = vocab
 
   def tokens(self):
-    for token in self.token_generator(self.train_file):
-      yield token
-
-    for token in self.token_generator(self.test_file):
-      yield token
+    for file in [self.train_file, self.test_file]:
+      if file is not None:
+        for token in self.token_generator(file):
+          yield token
 
   def token_generator(self, file):
     raise NotImplementedError
@@ -213,10 +232,8 @@ class TextDataset(Dataset):
 
 class RecordDataset(Dataset):
 
-  def __init__(self, text_dataset, out_dir=OUT_DIR, train_record_file=None, 
+  def __init__(self, out_dir, train_record_file=None, 
                test_record_file=None, unsup_record_file=None):
-    self.text_dataset = text_dataset
-
     self.train_record_file = train_record_file
     if self.train_record_file:
       self.train_record_file = os.path.join(out_dir, self.train_record_file)
@@ -229,11 +246,12 @@ class RecordDataset(Dataset):
     if self.unsup_record_file:
       self.unsup_record_file = os.path.join(out_dir, self.unsup_record_file)
   
-  def _write_records(self, generator, file, shuffle=False):
+  def _write_records(self, generators, file, shuffle=False):
     writer = tf.python_io.TFRecordWriter(file)
-    for example in generator:
-      example = to_example(example)
-      writer.write(example.SerializeToString())
+    for generator in generators:
+      for example in generator:
+        example = to_example(example)
+        writer.write(example.SerializeToString())
     writer.close()
     if shuffle:
       self._shuffle_records(file)
@@ -253,19 +271,13 @@ class RecordDataset(Dataset):
       writer.write(record)
     writer.close()
 
-  def generate_data(self):
-    tf.logging.info('generate TFRecord data')
+  def generate_train_records(self, generators):
     if self.train_record_file:
-      train_gen = self.text_dataset.train_examples()
-      self._write_records(train_gen, self.train_record_file, shuffle=True)
+      self._write_records(generators, self.train_record_file, shuffle=True)
 
+  def generate_test_records(self, generators):
     if self.test_record_file:
-      test_gen = self.text_dataset.test_examples()
-      self._write_records(test_gen, self.test_record_file)
-
-    if self.unsup_record_file:
-      unsup_gen = self.text_dataset.unsup_examples()
-      self._write_records(unsup_gen, self.unsup_record_file, shuffle=True)
+      self._write_records(generators, self.test_record_file)
 
   def get_length(self):
     length = []
@@ -341,30 +353,3 @@ def to_example(dictionary):
       raise ValueError("Value for %s is not a recognized type; v: %s type: %s" %
                        (k, str(v[0]), str(type(v[0]))))
   return tf.train.Example(features=tf.train.Features(feature=features))
-
-def relative_distance(n):
-  '''convert relative distance to positive number
-  -60), [-60, 60], (60
-  '''
-  if n < -60:
-    return 0
-  elif n >= -60 and n <= 60:
-    return n + 61
-  
-  return 122
-
-def position_feature(e_first, e_last, length):
-  pos = []
-  if e_first >= length:
-    e_first = length-1
-  if e_last >= length:
-    e_last = length-1
-
-  for i in range(length):
-    if i<e_first:
-      pos.append(relative_distance(i-e_first))
-    elif i>=e_first and i<=e_last:
-      pos.append(relative_distance(0))
-    else:
-      pos.append(relative_distance(i-e_last))
-  return pos

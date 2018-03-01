@@ -1,34 +1,47 @@
 import tensorflow as tf
-from inputs import dataset, semeval_v2, nyt2010
+import config as config_lib
+from inputs import dataset, rc_dataset
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-semeval_text = semeval_v2.SemEvalCleanedTextData()
-# nyt_text = nyt2010.NYT2010CleanedTextData()
+config = config_lib.get_config()
 
-# length statistics
-semeval_text.length_statistics()
+semeval_text = rc_dataset.RCTextData(
+      config.semeval_dir, config.semeval_train_file, config.semeval_test_file)
+# semeval_text.length_statistics()
+
+nyt_text = rc_dataset.NYTTextData(config.nyt_dir, config.nyt_train_file)
 # nyt_text.length_statistics()
 
 # gen vocab
-vocab_mgr = dataset.VocabMgr()
-vocab_mgr.generate_vocab(semeval_text.tokens())
+vocab = dataset.Vocab(config.out_dir, config.vocab_file)
+vocab.generate_vocab(semeval_text.tokens())
 
-# trim embedding
-vocab_mgr.trim_pretrain_embedding()
+nyt_vocab = dataset.Vocab()
+nyt_vocab.generate_vocab(nyt_text.tokens(), min_vocab_freq=2)
+
+vocab.union(nyt_vocab)
+
+# # trim embedding
+# embed = dataset.Embed(config.out_dir, config.trimmed_embed300_file, config.vocab_file)
+# google_embed = dataset.Embed(config.pretrain_embed_dir, 
+#                         config.google_embed300_file, config.google_words_file)
+# embed.trim_pretrain_embedding(google_embed)
 
 # build SemEval record data
-semeval_text.set_vocab_mgr(vocab_mgr)
-semeval_record = semeval_v2.SemEvalCleanedRecordData(semeval_text)
-semeval_record.generate_data()
+semeval_text.set_vocab(vocab)
+nyt_text.set_vocab(vocab)
 
-# build nyt record data
-# nyt_text.set_vocab_mgr(vocab_mgr)
-# nyt_record = nyt2010.NYT2010CleanedRecordData(nyt_text)
-# nyt_record.generate_data()
+tf.logging.info('generate TFRecord data')
+record_data = rc_dataset.RCRecordData(config.out_dir, 
+      config.train_record, config.semeval_test_record)
+record_data.generate_train_records([semeval_text.train_examples(), 
+                                    nyt_text.train_examples()])
+record_data.generate_test_records([semeval_text.test_examples()])
 
-# INFO:tensorflow:(percent, quantile) [(50, 17.0), (70, 21.0), (80, 24.0), (90, 29.0), (95, 33.0), (98, 40.0), (100, 98.0)]
-# INFO:tensorflow:(percent, quantile) [(50, 39.0), (70, 47.0), (80, 53.0), (90, 62.0), (95, 71.0), (98, 84.0), (100, 9621.0)]
-# INFO:tensorflow:generate TFRecord data
-# INFO:tensorflow:generate TFRecord data
-# INFO:tensorflow:ignore 1361 examples
+
+# INFO:tensorflow:(percent, quantile) 
+#  [(50, 18.0), (70, 22.0), (80, 25.0), (90, 29.0), (95, 34.0), (98, 40.0), (99, 46.0), (100, 97.0)]
+# INFO:tensorflow:(percent, quantile) 
+#  [(50, 39.0), (70, 47.0), (80, 53.0), (90, 62.0), (95, 71.0), (98, 84.0), (99, 95.0), (100, 9621.0)]
+
