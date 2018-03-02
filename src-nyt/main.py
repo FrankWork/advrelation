@@ -60,7 +60,8 @@ def main(_):
 
   semeval_data = rc_dataset.RCRecordData(config.out_dir, 
                 config.semeval_train_record, config.semeval_test_record)
-  nyt_data = rc_dataset.RCRecordData(config.out_dir, config.nyt_train_record)
+  nyt_data = rc_dataset.RCRecordData(config.out_dir, 
+                config.nyt_train_record, config.nyt_test_record)
 
   with tf.Graph().as_default():
     semeval_train_iter = semeval_data.train_data(config.hparams.num_epochs, 

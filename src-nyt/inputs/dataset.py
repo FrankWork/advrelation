@@ -270,6 +270,18 @@ class RecordDataset(Dataset):
     for record in records:
       writer.write(record)
     writer.close()
+  
+  def count_records(self):
+    def count(filename):
+      reader = tf.python_io.tf_record_iterator(filename)
+      num = 0
+      for record in reader:
+        # record is of <class 'bytes'>
+        num += 1
+      reader.close()
+      return num
+    tf.logging.info('train: %d' % count(self.train_record_file))
+    tf.logging.info('test: %d' % count(self.test_record_file))
 
   def generate_train_records(self, generators):
     if self.train_record_file:

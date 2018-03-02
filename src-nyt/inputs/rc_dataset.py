@@ -9,8 +9,9 @@ import tensorflow as tf
 
 class RCTextData(dataset.TextDataset):
  
-  def __init__(self, data_dir, train_file, test_file):
-    super().__init__(data_dir, train_file=train_file, test_file=test_file)
+  def __init__(self, data_dir, train_file, test_file, max_len=None):
+    super().__init__(data_dir, train_file=train_file, test_file=test_file, 
+                     max_len=max_len)
 
   def token_generator(self, file):
     with open(file) as f:
@@ -40,6 +41,8 @@ class RCTextData(dataset.TextDataset):
         tf.logging.debug(sent)
         sent = self.vocab.encode(sent)
         length = len(sent)
+        if self.max_len and length > self.max_len:
+          continue
 
         label_id = int(words[0])
 
@@ -81,33 +84,3 @@ class RCRecordData(dataset.RecordDataset):
   def padded_shapes(self):
     return ([], [], [4],
             [None], [None], [None])
-
-class NYTTextData(RCTextData):
-  def __init__(self, data_dir, train_file):
-    super().__init__(data_dir, train_file=train_file, test_file=None)
-  
-  def example_generator(self, file):
-    with open(file) as f:
-      for line in f:
-        words = line.strip().split(' ')
-        
-        sent = words[5:]
-        if len(sent) > 97:
-          continue
-          
-        tf.logging.debug(sent)
-        sent = self.vocab.encode(sent)
-        length = len(sent)
-
-        label_id = int(words[0]) + 19
-
-        e1_first, e1_last  = (int(words[1]), int(words[2]))
-        e2_first, e2_last  = (int(words[3]), int(words[4]))
-        ent_pos = [e1_first, e1_last, e2_first, e2_last]
-
-        pos1 = utils.position_feature(e1_first, e1_last, length)
-        pos2 = utils.position_feature(e2_first, e2_last, length)
-
-        yield {
-          'label': [label_id], 'length': [length], 'ent_pos': ent_pos, 
-          'sentence': sent, 'pos1': pos1, 'pos2': pos2}

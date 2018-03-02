@@ -1,7 +1,7 @@
+import tensorflow as tf
 
-def _get_hparams():
-  import tensorflow as tf
 
+def _baisc_hparams():
   hparams =  tf.contrib.training.HParams(
     num_epochs             = 50,
     batch_size             = 100,
@@ -11,24 +11,30 @@ def _get_hparams():
     tune_word_embed        = False,
     kernel_size            = 3,
     num_filters            = 310,
-    semeval_classes        = 19,
-    nyt_classes            = 53,
+    num_classes            = None,
     l2_scale               = 0.001,
     dropout_rate           = 0.5,
     learning_rate          = 0.001,
     max_norm               = None,
-    max_len                =97,
+    max_len                = 97,
+    logdir                 = "saved_models/",
+    save_dir               = "nyt_model"
     )
   
   return hparams
 
+def semeval_hparams():
+  hparams = _baisc_hparams()
+  hparams.num_classes = 19
+  return hparams
+
+def nyt_hparams():
+  hparams = _baisc_hparams()
+  hparams.num_classes = 53
+  return hparams
+
+
 class Config(object):
-  
-  hparams = _get_hparams()
-  
-  logdir = "saved_models/"
-  save_dir = "nyt_model"
-  
   out_dir = "data/generated"
 
   semeval_dir = "data/SemEval"
@@ -42,6 +48,8 @@ class Config(object):
   nyt_dir = "data/nyt2010"
   nyt_train_file = "train.cln"
   nyt_train_record = "train.nyt.tfrecord"
+  nyt_test_file = "test.cln"
+  nyt_test_record = "test.nyt.tfrecord"
 
   pretrain_embed_dir = 'data/pretrain'
   google_embed300_file = "embed300.google.npy"
@@ -51,7 +59,7 @@ class Config(object):
   vocab_size = None
   vocab_file = "vocab.txt"
 
-_config = Config()
 
 def get_config():
-  return _config
+  config = Config()
+  return config

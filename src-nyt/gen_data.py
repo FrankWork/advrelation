@@ -8,10 +8,11 @@ config = config_lib.get_config()
 
 semeval_text = rc_dataset.RCTextData(
       config.semeval_dir, config.semeval_train_file, config.semeval_test_file)
-# semeval_text.length_statistics()
+semeval_text.length_statistics()
 
-nyt_text = rc_dataset.NYTTextData(config.nyt_dir, config.nyt_train_file)
-# nyt_text.length_statistics()
+nyt_text = rc_dataset.RCTextData(
+      config.nyt_dir, config.nyt_train_file, config.nyt_test_file, max_len=97)
+nyt_text.length_statistics()
 
 # gen vocab
 vocab = dataset.Vocab(config.out_dir, config.vocab_file)
@@ -22,7 +23,7 @@ nyt_vocab.generate_vocab(nyt_text.tokens(), min_vocab_freq=2)
 
 vocab.union(nyt_vocab)
 
-# # trim embedding
+# trim embedding
 embed = dataset.Embed(config.out_dir, config.trimmed_embed300_file, config.vocab_file)
 google_embed = dataset.Embed(config.pretrain_embed_dir, 
                         config.google_embed300_file, config.google_words_file)
@@ -38,12 +39,21 @@ semeval_data = rc_dataset.RCRecordData(config.out_dir,
 semeval_data.generate_train_records([semeval_text.train_examples()])
 semeval_data.generate_test_records([semeval_text.test_examples()])
 
-nyt_data = rc_dataset.RCRecordData(config.out_dir, config.nyt_train_record)
+nyt_data = rc_dataset.RCRecordData(
+      config.out_dir, config.nyt_train_record, config.nyt_test_record)
 nyt_data.generate_train_records([nyt_text.train_examples()])
+nyt_data.generate_test_records([nyt_text.test_examples()])
 
+semeval_data.count_records()
+nyt_data.count_records()
 
 # INFO:tensorflow:(percent, quantile) 
 #  [(50, 18.0), (70, 22.0), (80, 25.0), (90, 29.0), (95, 34.0), (98, 40.0), (99, 46.0), (100, 97.0)]
 # INFO:tensorflow:(percent, quantile) 
 #  [(50, 39.0), (70, 47.0), (80, 53.0), (90, 62.0), (95, 71.0), (98, 84.0), (99, 95.0), (100, 9621.0)]
+
+# INFO:tensorflow:train: 8000
+# INFO:tensorflow:test: 2717
+# INFO:tensorflow:train: 570088 -> 565208
+# INFO:tensorflow:test: 172448  -> 170497
 

@@ -6,10 +6,32 @@ from models.attention import *
 
 
 class BaseModel(object):
+  def __init__(self, hparams, ini_word_embed, batched_data, is_train):
+    self.is_train = is_train
+    self.hparams = hparams
+
+    # embedding initialization
+    self.word_embed = tf.get_variable('word_embed', initializer= ini_word_embed,
+                      dtype=tf.float32, trainable=self.hparams.tune_word_embed)
+    pos_shape = [self.hparams.pos_num, self.hparams.pos_dim]  
+    self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
+    self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
+    self.embed_dim = self.hparams.word_embed_size + 2*self.hparams.pos_dim
+
+    self.tensors = dict()
+
+    initializer = tf.keras.initializers.he_normal()
+    self.regularizer = tf.contrib.layers.l2_regularizer(self.hparams.l2_scale)
+
+    with tf.variable_scope('model_graph', initializer=initializer):
+      self.build_graph(batched_data)
+    
+    self.set_saver()
+
   def set_saver(self):
     # shared between train and valid model instance
     self.saver = tf.train.Saver(var_list=None)
-    self.save_dir = os.path.join(self.config.logdir, self.config.save_dir)
+    self.save_dir = os.path.join(self.hparams.logdir, self.hparams.save_dir)
     self.save_path = os.path.join(self.save_dir, "model.ckpt")
 
   def restore(self, session):
@@ -36,6 +58,9 @@ class BaseModel(object):
       train_op = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
       return train_op
 
+  def build_graph(self, batched_data):
+    raise NotImplementedError
+
 def conv_block_v2(inputs, kernel_size, num_filters, name, training, 
                batch_norm=False, initializer=None, shortcut=None, reuse=None):
   with tf.variable_scope(name, reuse=reuse):
@@ -52,33 +77,7 @@ def conv_block_v2(inputs, kernel_size, num_filters, name, training,
     return conv_out
 
 class CNNModel(BaseModel):
-  def __init__(self, config, ini_word_embed, is_train):
-    self.is_train = is_train
-    self.config = config
-    self.hparams = config.hparams
 
-    # embedding initialization
-    self.word_embed = tf.get_variable('word_embed', initializer= ini_word_embed,
-                      dtype=tf.float32, trainable=self.hparams.tune_word_embed)
-    pos_shape = [self.hparams.pos_num, self.hparams.pos_dim]  
-    self.pos1_embed = tf.get_variable('pos1_embed', shape=pos_shape)
-    self.pos2_embed = tf.get_variable('pos2_embed', shape=pos_shape)
-    self.embed_dim = self.hparams.word_embed_size + 2*self.hparams.pos_dim
-
-    self.tensors = dict()
-
-    self.initializer = tf.keras.initializers.he_normal()
-    self.regularizer = tf.contrib.layers.l2_regularizer(self.hparams.l2_scale)
-
-
-      self.tensors['acc'] = acc
-      self.tensors['loss'] = loss_xent + loss_l2 
-      self.tensors['pred'] = pred
-
-      self.maybe_build_train_op()
-
-
-    
   def bottom(self, data):
     (labels, length, ent_pos, sentence, pos1, pos2) = data
 
@@ -100,8 +99,7 @@ class CNNModel(BaseModel):
     pool_out = tf.squeeze(pool_out, axis=1)
     return pool_out
 
-  def compute_logits(self, sentence, length, ent_pos, pos1, pos2, 
-                     num_classes, regularizer=None):
+  def compute_logits(self, sentence, length, ent_pos, pos1, pos2, regularizer=None):
     inputs = tf.concat([sentence, pos1, pos2], axis=2)
 
     entities = self.slice_entity(inputs, ent_pos, length)
@@ -119,7 +117,8 @@ class CNNModel(BaseModel):
     out = tf.concat([ent_out, conv_out], axis=1)
     # out = conv_out
     out = tf.layers.dropout(out, self.hparams.dropout_rate, training=self.is_train)
-    logits = tf.layers.dense(out, num_classes, name='out_dense-%d'%num_classes,
+    logits = tf.layers.dense(out, self.hparams.num_classes, 
+                        name='logits-%d' % self.hparams.num_classes,
                         kernel_regularizer=regularizer, reuse=tf.AUTO_REUSE)
     return logits
   
@@ -157,36 +156,42 @@ class CNNModel(BaseModel):
 
     return tf.reduce_mean(cross_entropy)
   
-  def build_graph(self, data, num_classes):
-    with tf.variable_scope('model_graph', initializer=self.initializer):
-      labels, length, ent_pos, sentence, pos1, pos2 = self.bottom(data)
+  def build_graph(self, data):
+    labels, length, ent_pos, sentence, pos1, pos2 = self.bottom(data)
 
-      # cross entropy loss
-      logits = self.compute_logits(sentence, length, ent_pos, pos1, pos2, 
-                                  num_classes, regularizer=self.regularizer)
-      loss_xent = self.compute_xentropy_loss(logits, labels)
+    # cross entropy loss
+    logits = self.compute_logits(sentence, length, ent_pos, pos1, pos2, regularizer=self.regularizer)
+    loss_xent = self.compute_xentropy_loss(logits, labels)
 
-      # # adv loss
-      adv_sentence = adv_example(sentence, loss_xent)
-      adv_logits = self.compute_logits(adv_sentence, length, 
-                                       ent_pos, pos1, pos2, num_classes)
-      loss_adv = self.compute_xentropy_loss(adv_logits, labels)
+    # # adv loss
+    adv_sentence = adv_example(sentence, loss_xent)
+    adv_logits = self.compute_logits(adv_sentence, length, ent_pos, pos1, pos2)
+    loss_adv = self.compute_xentropy_loss(adv_logits, labels)
 
-      # l2 loss
-      regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-      loss_l2 = sum(regularization_losses)
-      loss = loss_xent + loss_l2 # + loss_adv + loss_vadv
+    # # vadv loss
+    # loss_vadv = virtual_adversarial_loss(logits, sentence, length, ent_pos, pos1, pos2, self.compute_logits)
 
-      # Accuracy
-      with tf.name_scope("accuracy"):
-        pred = tf.argmax(logits, axis=1)
-        acc = tf.cast(tf.equal(pred, labels), tf.float32)
-        acc = tf.reduce_mean(acc)
+    # l2 loss
+    regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    loss_l2 = sum(regularization_losses)
+    # l2_losses = []
+    # for var in tf.trainable_variables():
+    #   l2_losses.append(tf.nn.l2_loss(var))
+    # loss_l2 = FLAGS.l2_coef*sum(l2_losses)
+    
+    # Accuracy
+    with tf.name_scope("accuracy"):
+      pred = tf.argmax(logits, axis=1)
+      acc = tf.cast(tf.equal(pred, labels), tf.float32)
+      acc = tf.reduce_mean(acc)
 
-    return loss, acc, pred
+    self.tensors['acc'] = acc
+    self.tensors['loss'] = loss_xent + loss_l2 # + loss_adv + loss_vadv
+    self.tensors['pred'] = pred
+
+    self.maybe_build_train_op()
 
   def maybe_build_train_op(self):
-    self.set_saver()
     if not self.is_train:
       return
 
@@ -237,11 +242,11 @@ class CNNModel(BaseModel):
     return all_pred
 
 
-def build_train_valid_model(config, ini_word_embed, train_data, test_data):
+def build_train_valid_model(hparams, ini_word_embed, train_data, test_data):
   with tf.name_scope("Train"):
     with tf.variable_scope('CNNModel', reuse=None):
-      m_train = CNNModel(config, ini_word_embed, train_data, is_train=True)
+      m_train = CNNModel(hparams, ini_word_embed, train_data, is_train=True)
   with tf.name_scope('Valid'):
     with tf.variable_scope('CNNModel', reuse=True):
-      m_valid = CNNModel(config, ini_word_embed, test_data, is_train=False)
+      m_valid = CNNModel(hparams, ini_word_embed, test_data, is_train=False)
   return m_train, m_valid
