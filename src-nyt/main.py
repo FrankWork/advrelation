@@ -58,19 +58,23 @@ def main(_):
   embed = dataset.Embed(config.out_dir, config.trimmed_embed300_file, config.vocab_file)
   ini_word_embed = embed.load_embedding()
 
-  record_data = rc_dataset.RCRecordData(config.out_dir, 
-                config.train_record, config.semeval_test_record)
+  semeval_data = rc_dataset.RCRecordData(config.out_dir, 
+                config.semeval_train_record, config.semeval_test_record)
+  nyt_data = rc_dataset.RCRecordData(config.out_dir, config.nyt_train_record)
 
   with tf.Graph().as_default():
-    train_iter = record_data.train_data(config.hparams.num_epochs, config.hparams.batch_size)
-    test_iter = record_data.test_data(1, config.hparams.batch_size)
+    semeval_train_iter = semeval_data.train_data(config.hparams.num_epochs, 
+                                                 config.hparams.batch_size)
+    test_iter = semeval_data.test_data(1, config.hparams.batch_size)
+    nyt_train_iter = nyt_data.train_data(config.hparams.num_epochs, 
+                                         config.hparams.batch_size)
 
-                                          
-    train_data = train_iter.get_next()
+    semeval_train_data = semeval_train_iter.get_next()
     test_data = test_iter.get_next()
+    nyt_train_data = semeval_train_iter.get_next()
 
     m_train, m_valid = cnn_model.build_train_valid_model(config, 
-                                          ini_word_embed, train_data, test_data)
+                  ini_word_embed, semeval_train_data, nyt_train_data, test_data)
 
     init_op = tf.group(tf.global_variables_initializer(),
                         tf.local_variables_initializer())# for file queue

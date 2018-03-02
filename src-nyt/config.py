@@ -11,13 +11,13 @@ def _get_hparams():
     tune_word_embed        = False,
     kernel_size            = 3,
     num_filters            = 310,
-    num_classes            = 19+53,
+    semeval_classes        = 19,
+    nyt_classes            = 53,
     l2_scale               = 0.001,
     dropout_rate           = 0.5,
     learning_rate          = 0.001,
     max_norm               = None,
     max_len                =97,
-
     )
   
   return hparams
@@ -35,13 +35,13 @@ class Config(object):
   # semeval_relations_file = 'relations.txt'
   semeval_train_file = "train.cln"
   semeval_test_file = "test.cln"
+  semeval_train_record = "train.semeval.tfrecord"
   semeval_test_record = "test.semeval.tfrecord"
   # semeval_results_file = "results.txt"
 
   nyt_dir = "data/nyt2010"
   nyt_train_file = "train.cln"
-
-  train_record = "train.tfrecord"
+  nyt_train_record = "train.nyt.tfrecord"
 
   pretrain_embed_dir = 'data/pretrain'
   google_embed300_file = "embed300.google.npy"

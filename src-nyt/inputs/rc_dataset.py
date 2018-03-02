@@ -56,10 +56,6 @@ class RCTextData(dataset.TextDataset):
     
 class RCRecordData(dataset.RecordDataset):
 
-  def __init__(self, out_dir, train_record_file, test_record_file):
-    super().__init__(out_dir=out_dir,
-      train_record_file=train_record_file, test_record_file=test_record_file)
-
   def parse_example(self, example):
     features = {
       "label": tf.FixedLenFeature([], tf.int64),
