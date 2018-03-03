@@ -44,7 +44,7 @@ class BaseModel(object):
   def optimize(self, loss, lrn_rate, max_norm=None, decay_steps=None):
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS) # for batch_norm
     with tf.control_dependencies(update_ops):
-      global_step = tf.Variable(0, name="global_step", trainable=False)
+      global_step = tf.train.get_or_create_global_step()
       
       if decay_steps is not None:
         lrn_rate = tf.train.exponential_decay(lrn_rate, global_step, 
@@ -115,6 +115,9 @@ class CNNModel(BaseModel):
     # conv_out = self.conv_deep(inputs)
 
     out = tf.concat([ent_out, conv_out], axis=1)
+    if not self.hparams.tune_conv:
+      out = tf.stop_gradient(out)
+
     # out = conv_out
     out = tf.layers.dropout(out, self.hparams.dropout_rate, training=self.is_train)
     logits = tf.layers.dense(out, self.hparams.num_classes, 
@@ -164,9 +167,9 @@ class CNNModel(BaseModel):
     loss_xent = self.compute_xentropy_loss(logits, labels)
 
     # # adv loss
-    adv_sentence = adv_example(sentence, loss_xent)
-    adv_logits = self.compute_logits(adv_sentence, length, ent_pos, pos1, pos2)
-    loss_adv = self.compute_xentropy_loss(adv_logits, labels)
+    # adv_sentence = adv_example(sentence, loss_xent)
+    # adv_logits = self.compute_logits(adv_sentence, length, ent_pos, pos1, pos2)
+    # loss_adv = self.compute_xentropy_loss(adv_logits, labels)
 
     # # vadv loss
     # loss_vadv = virtual_adversarial_loss(logits, sentence, length, ent_pos, pos1, pos2, self.compute_logits)
@@ -213,6 +216,16 @@ class CNNModel(BaseModel):
       moving_acc.append(acc)
    
     return np.mean(moving_loss), np.mean(moving_acc)*100
+  
+  def train_step(self, session):
+    if not self.is_train:
+      return
+
+    fetches = [self.train_ops['train_loss'], self.tensors['loss'], self.tensors['acc']]
+    _, loss, acc = session.run(fetches)
+
+    return loss, acc
+
 
   def evaluate(self, session, test_ds_iter, num_batches):
     if self.is_train:
@@ -244,7 +257,7 @@ class CNNModel(BaseModel):
 
 def build_train_valid_model(hparams, ini_word_embed, train_data, test_data):
   with tf.name_scope("Train"):
-    with tf.variable_scope('CNNModel', reuse=None):
+    with tf.variable_scope('CNNModel', reuse=tf.AUTO_REUSE):
       m_train = CNNModel(hparams, ini_word_embed, train_data, is_train=True)
   with tf.name_scope('Valid'):
     with tf.variable_scope('CNNModel', reuse=True):

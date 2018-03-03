@@ -36,3 +36,35 @@ Epoch 32 train 0.30 90.76 valid 79.88 time 6.16
 Epoch 33 train 0.29 91.15 valid 79.91 time 6.02
 Epoch 34 train 0.29 91.58 valid 79.84 time 6.00
 Epoch 35 train 0.27 91.74 valid 80.09 time 6.19
+
+
+$ cnn, no adv
+
+
+Epoch 0 batch 1000 loss 0.79 acc 77.01 time 82.95
+Epoch 0 batch 2000 loss 0.50 acc 83.10 time 78.80
+Epoch 0 batch 3000 loss 0.44 acc 84.68 time 77.96
+Epoch 0 batch 4000 loss 0.41 acc 85.66 time 78.71
+Epoch 0 batch 5000 loss 0.39 acc 86.21 time 77.70
+	 Valid acc: 93.61
+Epoch 1 batch 6000 loss 0.37 acc 86.62 time 121.59
+Epoch 1 batch 7000 loss 0.36 acc 86.85 time 79.07
+Epoch 1 batch 8000 loss 0.36 acc 87.11 time 78.51
+Epoch 1 batch 9000 loss 0.34 acc 87.54 time 77.63
+Epoch 1 batch 10000 loss 0.34 acc 87.60 time 77.89
+Epoch 1 batch 11000 loss 0.33 acc 87.79 time 79.38
+	 Valid acc: 93.57
+Epoch 2 batch 12000 loss 0.33 acc 87.92 time 122.35
+Epoch 2 batch 13000 loss 0.33 acc 87.97 time 77.89
+Epoch 2 batch 14000 loss 0.32 acc 88.08 time 77.97
+Epoch 2 batch 15000 loss 0.32 acc 88.37 time 77.96
+Epoch 2 batch 16000 loss 0.31 acc 88.42 time 81.94
+	 Valid acc: 93.77
+Epoch 3 batch 17000 loss 0.31 acc 88.46 time 119.74
+Epoch 3 batch 18000 loss 0.31 acc 88.59 time 78.33
+Epoch 3 batch 19000 loss 0.30 acc 88.76 time 79.66
+Epoch 3 batch 20000 loss 0.30 acc 88.87 time 79.15
+Epoch 3 batch 21000 loss 0.30 acc 88.90 time 77.87
+Epoch 3 batch 22000 loss 0.30 acc 88.89 time 79.07
+	 Valid acc: 95.71
+
